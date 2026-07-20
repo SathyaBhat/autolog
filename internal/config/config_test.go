@@ -44,5 +44,15 @@ func TestLoad_MissingRequired(t *testing.T) {
 		os.Unsetenv(k)
 	}
 	_, err := config.Load("")
-	assert.Error(t, err)
+	assert.Error(t, err) // owntracks fields are still required
+}
+
+func TestLoad_TelegramOptional(t *testing.T) {
+	t.Setenv("OWNTRACKS_URL", "http://localhost:8083")
+	t.Setenv("OWNTRACKS_USER", "bob")
+	t.Setenv("OWNTRACKS_DEVICE", "phone")
+	// no TELEGRAM_* set
+	cfg, err := config.Load("")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Telegram.BotToken)
 }

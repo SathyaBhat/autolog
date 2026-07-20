@@ -110,11 +110,5 @@ func (c *Config) validate() error {
 	if c.OwnTracks.Device == "" {
 		return fmt.Errorf("owntracks.device (or OWNTRACKS_DEVICE) is required")
 	}
-	if c.Telegram.BotToken == "" {
-		return fmt.Errorf("telegram.bot_token (or TELEGRAM_BOT_TOKEN) is required")
-	}
-	if c.Telegram.ChatID == "" {
-		return fmt.Errorf("telegram.chat_id (or TELEGRAM_CHAT_ID) is required")
-	}
 	return nil
 }
