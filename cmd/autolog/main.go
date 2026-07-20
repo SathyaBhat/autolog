@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -22,6 +23,10 @@ import (
 func main() {
 	cfgFile := flag.String("config", "", "path to config.yaml (default: ./config.yaml)")
 	flag.Parse()
+
+	// Load .env if present; silently ignored when not found (e.g. in Docker where
+	// env vars are injected directly).
+	_ = godotenv.Load()
 
 	tmpLog, _ := zap.NewDevelopment()
 
