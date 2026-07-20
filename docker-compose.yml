@@ -1,0 +1,11 @@
+services:
+  autolog:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/config.yaml:ro
+      - autolog-data:/data
+    command: ["-config", "/config.yaml"]
+
+volumes:
+  autolog-data:

@@ -1,0 +1,4 @@
+autolog
+autolog.db
+config.yaml
+*.db
