@@ -34,6 +34,7 @@ type SchedulerConfig struct {
 
 type FiltersConfig struct {
 	MaxTrainSpeedKmh float64         `mapstructure:"max_train_speed_kmh"`
+	MinDistanceKm    float64         `mapstructure:"min_distance_km"`
 	ExclusionZones   []ExclusionZone `mapstructure:"exclusion_zones"`
 }
 
@@ -57,6 +58,7 @@ func Load(cfgFile string) (*Config, error) {
 
 	v.SetDefault("scheduler.interval", 6*time.Hour)
 	v.SetDefault("filters.max_train_speed_kmh", 150.0)
+	v.SetDefault("filters.min_distance_km", 0.5)
 	v.SetDefault("store.path", "autolog.db")
 	v.SetDefault("log.level", "info")
 

@@ -106,6 +106,7 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 
 	classCfg := trips.ClassifierConfig{
 		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
+		MinDistanceKm:    r.cfg.Filters.MinDistanceKm,
 		ExclusionZones:   r.cfg.Filters.ExclusionZones,
 	}
 

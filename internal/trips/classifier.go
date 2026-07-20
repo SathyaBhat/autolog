@@ -10,6 +10,7 @@ import (
 // ClassifierConfig controls the train-detection and exclusion-zone heuristics.
 type ClassifierConfig struct {
 	MaxTrainSpeedKmh float64
+	MinDistanceKm    float64
 	ExclusionZones   []config.ExclusionZone
 }
 
@@ -27,11 +28,21 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 		return Trip{}, false
 	}
 
-	var distKm float64
-	var maxSpeed float64
+	// Pre-check distance to avoid classifying GPS drift as trips.
+	var preCheckDist float64
 	for i := 1; i < len(pts); i++ {
-		distKm += HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
+		preCheckDist += HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
 	}
+	minDist := cfg.MinDistanceKm
+	if minDist <= 0 {
+		minDist = 0.5
+	}
+	if preCheckDist < minDist {
+		return Trip{}, false
+	}
+
+	distKm := preCheckDist
+	var maxSpeed float64
 	for _, p := range pts {
 		if p.Vel > maxSpeed {
 			maxSpeed = p.Vel
