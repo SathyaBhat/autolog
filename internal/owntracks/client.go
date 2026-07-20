@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 )
 
@@ -37,8 +36,8 @@ func (c *Client) Fetch(ctx context.Context, from, to time.Time) ([]Point, error)
 	q := u.Query()
 	q.Set("user", c.user)
 	q.Set("device", c.device)
-	q.Set("from", strconv.FormatInt(from.Unix(), 10))
-	q.Set("to", strconv.FormatInt(to.Unix(), 10))
+	q.Set("from", from.Format("2006-01-02"))
+	q.Set("to", to.Format("2006-01-02"))
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
