@@ -24,11 +24,11 @@ func (s *stubOwnTracks) Fetch(_ context.Context, _, _ time.Time) ([]owntracks.Po
 	return s.points, nil
 }
 
-type stubTelegram struct {
+type stubNotifier struct {
 	sent []trips.Trip
 }
 
-func (s *stubTelegram) Send(_ context.Context, t trips.Trip) error {
+func (s *stubNotifier) Send(_ context.Context, t trips.Trip) error {
 	s.sent = append(s.sent, t)
 	return nil
 }
@@ -45,7 +45,7 @@ func TestRunner_ProcessOnce_StoresTrip(t *testing.T) {
 	require.NoError(t, err)
 	defer st.Close()
 
-	tg := &stubTelegram{}
+	tg := &stubNotifier{}
 	ot := &stubOwnTracks{points: pts}
 
 	cfg := &config.Config{
@@ -70,7 +70,7 @@ func TestRunner_ProcessOnce_NoNotificationUnder100km(t *testing.T) {
 
 	st, _ := store.New(":memory:")
 	defer st.Close()
-	tg := &stubTelegram{}
+	tg := &stubNotifier{}
 
 	cfg := &config.Config{Filters: config.FiltersConfig{MaxTrainSpeedKmh: 150}}
 	r := runner.NewWithDeps(cfg, &stubOwnTracks{points: pts}, st, tg, zap.NewNop())

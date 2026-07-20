@@ -1,4 +1,5 @@
-autolog
+/autolog
 autolog.db
 config.yaml
 *.db
+.env

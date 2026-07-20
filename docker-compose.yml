@@ -1,11 +1,18 @@
 services:
   autolog:
     build: .
+    container_name: autolog
     restart: unless-stopped
+    env_file:
+      - path: .env
     volumes:
-      - ./config.yaml:/config.yaml:ro
       - autolog-data:/data
-    command: ["-config", "/config.yaml"]
+    networks:
+      - dokploy-network
 
 volumes:
   autolog-data:
+
+networks:
+  dokploy-network:
+    external: true

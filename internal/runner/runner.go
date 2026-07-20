@@ -20,8 +20,8 @@ type locationFetcher interface {
 	Fetch(ctx context.Context, from, to time.Time) ([]owntracks.Point, error)
 }
 
-// tripNotifier is the subset of notify.Telegram used by Runner.
-type tripNotifier interface {
+// Notifier sends trip notifications. *notify.Telegram and *notify.Stdout both satisfy this.
+type Notifier interface {
 	Send(ctx context.Context, t trips.Trip) error
 }
 
@@ -30,17 +30,17 @@ type Runner struct {
 	cfg   *config.Config
 	ot    locationFetcher
 	store *store.Store
-	tg    tripNotifier
+	tg    Notifier
 	log   *zap.Logger
 }
 
 // New creates a Runner with concrete dependencies.
-func New(cfg *config.Config, ot *owntracks.Client, st *store.Store, tg tripNotifier, log *zap.Logger) *Runner {
+func New(cfg *config.Config, ot *owntracks.Client, st *store.Store, tg Notifier, log *zap.Logger) *Runner {
 	return NewWithDeps(cfg, ot, st, tg, log)
 }
 
 // NewWithDeps creates a Runner with interface dependencies (for testing).
-func NewWithDeps(cfg *config.Config, ot locationFetcher, st *store.Store, tg tripNotifier, log *zap.Logger) *Runner {
+func NewWithDeps(cfg *config.Config, ot locationFetcher, st *store.Store, tg Notifier, log *zap.Logger) *Runner {
 	return &Runner{cfg: cfg, ot: ot, store: st, tg: tg, log: log}
 }
 
