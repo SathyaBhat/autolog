@@ -44,18 +44,23 @@ func NewTelegramWithBaseURL(baseURL, botToken, chatID, messageThreadID string, g
 
 // Send posts a trip summary message to the configured Telegram chat.
 func (tg *Telegram) Send(ctx context.Context, t trips.Trip) error {
-	var text string
-	if t.StartLocation != "" && t.EndLocation != "" {
-		text = fmt.Sprintf("🚗 %s: %s → %s, %.1f km", t.Date, t.StartLocation, t.EndLocation, t.DistanceKm)
+	var from, to string
+	if t.StartLocation != "" {
+		from = t.StartLocation
 	} else {
-		text = fmt.Sprintf(
-			"🚗 %s: %.4f,%.4f → %.4f,%.4f, %.1f km",
-			t.Date,
-			t.StartLat, t.StartLon,
-			t.EndLat, t.EndLon,
-			t.DistanceKm,
-		)
+		from = fmt.Sprintf("%.4f,%.4f", t.StartLat, t.StartLon)
 	}
+	if t.EndLocation != "" {
+		to = t.EndLocation
+	} else {
+		to = fmt.Sprintf("%.4f,%.4f", t.EndLat, t.EndLon)
+	}
+	text := fmt.Sprintf("🚙 New trip logged: %s (%.1f km) %s -> %s",
+		t.StartTime.Format("2006-01-02 15:04"),
+		t.DistanceKm,
+		from,
+		to,
+	)
 
 	payload := map[string]string{
 		"chat_id": tg.chatID,

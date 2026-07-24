@@ -39,6 +39,7 @@ func TestTelegram_Send(t *testing.T) {
 	err := tg.Send(context.Background(), trip)
 	require.NoError(t, err)
 	assert.Equal(t, "12345", gotBody["chat_id"])
+	assert.Contains(t, gotBody["text"], "New trip logged:")
 	assert.Contains(t, gotBody["text"], "341.2 km")
-	assert.Contains(t, gotBody["text"], "2026-07-20")
+	assert.Contains(t, gotBody["text"], "2026-07-20 08:00")
 }
