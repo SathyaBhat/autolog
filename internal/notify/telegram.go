@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/sathyabhat/autolog/internal/geocode"
 	"github.com/sathyabhat/autolog/internal/trips"
 )
 
@@ -19,33 +20,40 @@ type Telegram struct {
 	botToken string
 	chatID   string
 	http     *http.Client
+	geo      *geocode.Client
 }
 
 // NewTelegram creates a Telegram notifier using the official API base URL.
-func NewTelegram(botToken, chatID string) *Telegram {
-	return NewTelegramWithBaseURL(telegramBaseURL, botToken, chatID)
+func NewTelegram(botToken, chatID string, geo *geocode.Client) *Telegram {
+	return NewTelegramWithBaseURL(telegramBaseURL, botToken, chatID, geo)
 }
 
 // NewTelegramWithBaseURL creates a Telegram notifier with a custom base URL
 // (used in tests to point at a local httptest server).
-func NewTelegramWithBaseURL(baseURL, botToken, chatID string) *Telegram {
+func NewTelegramWithBaseURL(baseURL, botToken, chatID string, geo *geocode.Client) *Telegram {
 	return &Telegram{
 		baseURL:  baseURL,
 		botToken: botToken,
 		chatID:   chatID,
 		http:     &http.Client{Timeout: 10 * time.Second},
+		geo:      geo,
 	}
 }
 
 // Send posts a trip summary message to the configured Telegram chat.
 func (tg *Telegram) Send(ctx context.Context, t trips.Trip) error {
-	text := fmt.Sprintf(
-		"🚗 %s: %.4f,%.4f → %.4f,%.4f, %.1f km",
-		t.Date,
-		t.StartLat, t.StartLon,
-		t.EndLat, t.EndLon,
-		t.DistanceKm,
-	)
+	var text string
+	if t.StartLocation != "" && t.EndLocation != "" {
+		text = fmt.Sprintf("🚗 %s: %s → %s, %.1f km", t.Date, t.StartLocation, t.EndLocation, t.DistanceKm)
+	} else {
+		text = fmt.Sprintf(
+			"🚗 %s: %.4f,%.4f → %.4f,%.4f, %.1f km",
+			t.Date,
+			t.StartLat, t.StartLon,
+			t.EndLat, t.EndLon,
+			t.DistanceKm,
+		)
+	}
 
 	payload := map[string]string{
 		"chat_id": tg.chatID,
