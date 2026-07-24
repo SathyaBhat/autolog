@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/sathyabhat/autolog/internal/config"
+	"github.com/sathyabhat/autolog/internal/geocode"
 	"github.com/sathyabhat/autolog/internal/notify"
 	"github.com/sathyabhat/autolog/internal/owntracks"
 	"github.com/sathyabhat/autolog/internal/runner"
@@ -22,6 +24,8 @@ import (
 
 func main() {
 	cfgFile := flag.String("config", "", "path to config.yaml (default: ./config.yaml)")
+	backfill := flag.Bool("backfill", false, "run a historical backfill and exit")
+	backfillFrom := flag.String("from", "", "start date for backfill, YYYY-MM-DD (required with -backfill)")
 	flag.Parse()
 
 	// Load .env if present; silently ignored when not found (e.g. in Docker where
@@ -53,21 +57,51 @@ func main() {
 
 	ot := owntracks.New(cfg.OwnTracks.URL, cfg.OwnTracks.User, cfg.OwnTracks.Device)
 
+	geo := geocode.New().WithStore(st)
+	log.Info("geocoding: nominatim")
+
 	var notifier runner.Notifier
 	if os.Getenv("NOTIFY_STDOUT") == "true" {
-		notifier = &notify.Stdout{}
+		notifier = notify.NewStdout(geo)
 		log.Info("notifications: stdout")
 	} else {
 		if cfg.Telegram.BotToken == "" || cfg.Telegram.ChatID == "" {
 			log.Fatal("telegram.bot_token and telegram.chat_id are required when NOTIFY_STDOUT is not set")
 		}
-		notifier = notify.NewTelegram(cfg.Telegram.BotToken, cfg.Telegram.ChatID)
+		notifier = notify.NewTelegram(cfg.Telegram.BotToken, cfg.Telegram.ChatID, geo)
 		log.Info("notifications: telegram")
 	}
 	r := runner.New(cfg, ot, st, notifier, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if !*backfill && os.Getenv("BACKFILL") == "true" {
+		*backfill = true
+	}
+	if *backfillFrom == "" {
+		*backfillFrom = os.Getenv("BACKFILL_FROM")
+	}
+
+	if *backfill {
+		if *backfillFrom == "" {
+			log.Fatal("-from / BACKFILL_FROM is required with -backfill / BACKFILL=true (e.g. 2025-01-01)")
+		}
+		from, err := time.Parse("2006-01-02", *backfillFrom)
+		if err != nil {
+			log.Fatal("invalid -from date, expected YYYY-MM-DD", zap.Error(err))
+		}
+		to := time.Now().UTC()
+		log.Info("starting backfill", zap.Time("from", from), zap.Time("to", to))
+		if err := r.Backfill(ctx, from, to); err != nil && !errors.Is(err, context.Canceled) {
+			log.Fatal("backfill failed", zap.Error(err))
+		}
+		if err := st.SetLastProcessedTime(ctx, to); err != nil {
+			log.Error("failed to update last processed time after backfill", zap.Error(err))
+		}
+		log.Info("backfill complete")
+		return
+	}
 
 	if err := r.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Fatal("runner exited with error", zap.Error(err))
