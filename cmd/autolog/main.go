@@ -71,7 +71,7 @@ func main() {
 		notifier = notify.NewTelegram(cfg.Telegram.BotToken, cfg.Telegram.ChatID, geo)
 		log.Info("notifications: telegram")
 	}
-	r := runner.New(cfg, ot, st, notifier, log)
+	r := runner.New(cfg, ot, st, notifier, geo, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

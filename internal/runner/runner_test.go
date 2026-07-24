@@ -52,7 +52,7 @@ func TestRunner_ProcessOnce_StoresTrip(t *testing.T) {
 		Filters: config.FiltersConfig{MaxTrainSpeedKmh: 150},
 	}
 
-	r := runner.NewWithDeps(cfg, ot, st, tg, zap.NewNop())
+	r := runner.NewWithDeps(cfg, ot, st, tg, nil, zap.NewNop())
 	err = r.ProcessOnce(context.Background(), time.Unix(now-3600, 0), time.Unix(now+3600, 0))
 	require.NoError(t, err)
 
@@ -73,7 +73,7 @@ func TestRunner_ProcessOnce_NoNotificationUnder100km(t *testing.T) {
 	tg := &stubNotifier{}
 
 	cfg := &config.Config{Filters: config.FiltersConfig{MaxTrainSpeedKmh: 150}}
-	r := runner.NewWithDeps(cfg, &stubOwnTracks{points: pts}, st, tg, zap.NewNop())
+	r := runner.NewWithDeps(cfg, &stubOwnTracks{points: pts}, st, tg, nil, zap.NewNop())
 	_ = r.ProcessOnce(context.Background(), time.Unix(now-3600, 0), time.Unix(now+3600, 0))
 
 	assert.Empty(t, tg.sent)
