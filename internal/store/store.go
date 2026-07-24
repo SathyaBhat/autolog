@@ -66,8 +66,21 @@ func New(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	migrations := []string{
+		`ALTER TABLE trips ADD COLUMN start_location TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE trips ADD COLUMN end_location TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, m := range migrations {
+		if _, err := db.Exec(m); err != nil {
+			// SQLite errors if the column already exists; treat any error as already applied.
+			_ = err
+		}
+	}
 	return &Store{db: db}, nil
 }
+
+// DB returns the underlying *sql.DB. Used in tests only.
+func (s *Store) DB() *sql.DB { return s.db }
 
 // Close closes the underlying database connection.
 func (s *Store) Close() error {
@@ -86,8 +99,8 @@ func (s *Store) SaveTrip(ctx context.Context, t trips.Trip) error {
 	res, err := tx.ExecContext(ctx, `
 		INSERT OR IGNORE INTO trips
 		  (date, start_time, end_time, start_lat, start_lon, end_lat, end_lon,
-		   distance_km, max_speed_kmh, mode)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		   distance_km, max_speed_kmh, mode, start_location, end_location)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.Date,
 		t.StartTime.Unix(),
 		t.EndTime.Unix(),
@@ -96,6 +109,8 @@ func (s *Store) SaveTrip(ctx context.Context, t trips.Trip) error {
 		t.DistanceKm,
 		t.MaxSpeedKmh,
 		string(t.Mode),
+		t.StartLocation,
+		t.EndLocation,
 	)
 	if err != nil {
 		return fmt.Errorf("insert trip: %w", err)

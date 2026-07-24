@@ -152,6 +152,46 @@ func TestGeocodeCache_RoundingCollision(t *testing.T) {
 	assert.Equal(t, "Near Westminster", label)
 }
 
+func TestSaveTrip_LocationColumns(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	start := time.Date(2026, 7, 24, 8, 0, 0, 0, time.UTC)
+	trip := trips.Trip{
+		Date:          "2026-07-24",
+		StartTime:     start,
+		EndTime:       start.Add(time.Hour),
+		StartLat:      51.5, StartLon: -0.1,
+		EndLat:        51.8, EndLon: -0.3,
+		DistanceKm:    45, MaxSpeedKmh: 90, Mode: trips.ModeCar,
+		StartLocation: "Oxford Street, Westminster",
+		EndLocation:   "High Street, Camden",
+	}
+	require.NoError(t, s.SaveTrip(ctx, trip))
+
+	var sl, el string
+	err := s.DB().QueryRowContext(ctx,
+		`SELECT start_location, end_location FROM trips WHERE date = ? AND start_time = ?`,
+		"2026-07-24", start.Unix(),
+	).Scan(&sl, &el)
+	require.NoError(t, err)
+	assert.Equal(t, "Oxford Street, Westminster", sl)
+	assert.Equal(t, "High Street, Camden", el)
+}
+
+func TestSaveTrip_LocationColumns_EmptyOK(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	start := time.Date(2026, 7, 24, 9, 0, 0, 0, time.UTC)
+	trip := trips.Trip{
+		Date: "2026-07-24", StartTime: start, EndTime: start.Add(time.Hour),
+		StartLat: 51.5, StartLon: -0.1, EndLat: 51.8, EndLon: -0.3,
+		DistanceKm: 30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
+	}
+	require.NoError(t, s.SaveTrip(ctx, trip))
+}
+
 func TestLastProcessedTime_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := newTestStore(t)
