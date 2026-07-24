@@ -36,8 +36,8 @@ func (c *Client) Fetch(ctx context.Context, from, to time.Time) ([]Point, error)
 	q := u.Query()
 	q.Set("user", c.user)
 	q.Set("device", c.device)
-	q.Set("from", from.Format("2006-01-02"))
-	q.Set("to", to.Format("2006-01-02"))
+	q.Set("from", from.Format("2006-01-02T15:04:05"))
+	q.Set("to", to.Format("2006-01-02T15:04:05"))
 	u.RawQuery = q.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -59,5 +59,23 @@ func (c *Client) Fetch(ctx context.Context, from, to time.Time) ([]Point, error)
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
-	return envelope.Data, nil
+	return dedupByTst(envelope.Data), nil
+}
+
+// dedupByTst removes duplicate points with identical timestamps, keeping the first occurrence.
+// OwnTracks Recorder can replay cached/stale fixes with the same tst on reconnect.
+func dedupByTst(pts []Point) []Point {
+	if len(pts) == 0 {
+		return pts
+	}
+	seen := make(map[int64]struct{}, len(pts))
+	out := pts[:0:0]
+	for _, p := range pts {
+		if _, dup := seen[p.Tst]; dup {
+			continue
+		}
+		seen[p.Tst] = struct{}{}
+		out = append(out, p)
+	}
+	return out
 }
