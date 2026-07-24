@@ -24,8 +24,9 @@ type OwnTracksConfig struct {
 }
 
 type TelegramConfig struct {
-	BotToken string `mapstructure:"bot_token"`
-	ChatID   string `mapstructure:"chat_id"`
+	BotToken        string `mapstructure:"bot_token"`
+	ChatID          string `mapstructure:"chat_id"`
+	MessageThreadID string `mapstructure:"message_thread_id"`
 }
 
 type SchedulerConfig struct {
@@ -35,6 +36,7 @@ type SchedulerConfig struct {
 type FiltersConfig struct {
 	MaxTrainSpeedKmh float64         `mapstructure:"max_train_speed_kmh"`
 	MinDistanceKm    float64         `mapstructure:"min_distance_km"`
+	MaxAccM          float64         `mapstructure:"max_acc_m"`
 	ExclusionZones   []ExclusionZone `mapstructure:"exclusion_zones"`
 }
 
@@ -58,7 +60,8 @@ func Load(cfgFile string) (*Config, error) {
 
 	v.SetDefault("scheduler.interval", 6*time.Hour)
 	v.SetDefault("filters.max_train_speed_kmh", 150.0)
-	v.SetDefault("filters.min_distance_km", 0.5)
+	v.SetDefault("filters.min_distance_km", 5.0)
+	v.SetDefault("filters.max_acc_m", 100.0)
 	v.SetDefault("store.path", "autolog.db")
 	v.SetDefault("log.level", "info")
 
@@ -79,6 +82,7 @@ func Load(cfgFile string) (*Config, error) {
 	_ = v.BindEnv("owntracks.device", "OWNTRACKS_DEVICE")
 	_ = v.BindEnv("telegram.bot_token", "TELEGRAM_BOT_TOKEN")
 	_ = v.BindEnv("telegram.chat_id", "TELEGRAM_CHAT_ID")
+	_ = v.BindEnv("telegram.message_thread_id", "TELEGRAM_MESSAGE_THREAD_ID")
 	_ = v.BindEnv("scheduler.interval", "SCHEDULER_INTERVAL")
 	_ = v.BindEnv("filters.max_train_speed_kmh", "FILTERS_MAX_TRAIN_SPEED_KMH")
 	_ = v.BindEnv("store.path", "STORE_PATH")

@@ -14,10 +14,12 @@ import (
 
 func TestClassify_Car(t *testing.T) {
 	now := time.Now().Unix()
+	// Points ~830m apart per 60s step ≈ 50 km/h computed speed, well under train threshold.
 	raw := trips.RawTrip{Points: []owntracks.Point{
-		{Tst: now, Lat: 51.5, Lon: -0.1, Vel: 50},
-		{Tst: now + 60, Lat: 51.52, Lon: -0.12, Vel: 55},
-		{Tst: now + 120, Lat: 51.54, Lon: -0.14, Vel: 48},
+		{Tst: now, Lat: 51.5, Lon: -0.1, Acc: 10},
+		{Tst: now + 60, Lat: 51.5075, Lon: -0.1, Acc: 10},
+		{Tst: now + 120, Lat: 51.515, Lon: -0.1, Acc: 10},
+		{Tst: now + 180, Lat: 51.5225, Lon: -0.1, Acc: 10},
 	}}
 	cfg := trips.ClassifierConfig{MaxTrainSpeedKmh: 150}
 	trip, keep := trips.Classify(raw, cfg)
@@ -29,9 +31,10 @@ func TestClassify_Car(t *testing.T) {
 
 func TestClassify_Train_MaxSpeed(t *testing.T) {
 	now := time.Now().Unix()
+	// ~47 km apart in 60s ≈ 2800 km/h computed — well above any train threshold.
 	raw := trips.RawTrip{Points: []owntracks.Point{
-		{Tst: now, Lat: 51.5, Lon: -0.1, Vel: 200},
-		{Tst: now + 60, Lat: 51.8, Lon: -0.5, Vel: 180},
+		{Tst: now, Lat: 51.5, Lon: -0.1, Acc: 10},
+		{Tst: now + 60, Lat: 51.8, Lon: -0.5, Acc: 10},
 	}}
 	cfg := trips.ClassifierConfig{MaxTrainSpeedKmh: 150}
 	trip, keep := trips.Classify(raw, cfg)

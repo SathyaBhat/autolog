@@ -11,15 +11,31 @@ import (
 type ClassifierConfig struct {
 	MaxTrainSpeedKmh float64
 	MinDistanceKm    float64
+	MaxAccM          float64
 	ExclusionZones   []config.ExclusionZone
 }
 
 // Classify measures and classifies a RawTrip.
 // Returns (trip, true) if the trip should be stored, (Trip{}, false) if it
-// should be discarded (exclusion zone hit).
+// should be discarded (exclusion zone hit, too short, or all points inaccurate).
 // Train trips are stored but marked ModeTrain so they appear in the log.
 func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
-	pts := raw.Points
+	maxAcc := cfg.MaxAccM
+	if maxAcc <= 0 {
+		maxAcc = 100.0
+	}
+
+	// Drop points with accuracy radius worse than threshold (cell-tower fixes).
+	var pts []owntracks.Point
+	for _, p := range raw.Points {
+		if p.Acc <= maxAcc {
+			pts = append(pts, p)
+		}
+	}
+	if len(pts) < 2 {
+		return Trip{}, false
+	}
+
 	first := pts[0]
 	last := pts[len(pts)-1]
 
@@ -28,25 +44,27 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 		return Trip{}, false
 	}
 
-	// Pre-check distance to avoid classifying GPS drift as trips.
-	var preCheckDist float64
+	// Compute distance and speed from coordinates, not reported vel.
+	// vel=null deserialises as 0 and cannot be trusted for classification.
+	var distKm, maxSpeed float64
 	for i := 1; i < len(pts); i++ {
-		preCheckDist += HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
-	}
-	minDist := cfg.MinDistanceKm
-	if minDist <= 0 {
-		minDist = 0.5
-	}
-	if preCheckDist < minDist {
-		return Trip{}, false
+		d := HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
+		distKm += d
+		dt := float64(pts[i].Tst - pts[i-1].Tst) // seconds
+		if dt > 0 {
+			speedKmh := d / dt * 3600
+			if speedKmh > maxSpeed {
+				maxSpeed = speedKmh
+			}
+		}
 	}
 
-	distKm := preCheckDist
-	var maxSpeed float64
-	for _, p := range pts {
-		if p.Vel > maxSpeed {
-			maxSpeed = p.Vel
-		}
+	minDist := cfg.MinDistanceKm
+	if minDist <= 0 {
+		minDist = 2.0
+	}
+	if distKm < minDist {
+		return Trip{}, false
 	}
 
 	mode := classifyMode(pts, maxSpeed, cfg.MaxTrainSpeedKmh)
@@ -65,28 +83,36 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 		DistanceKm:  distKm,
 		MaxSpeedKmh: maxSpeed,
 		Mode:        mode,
+		Points:      pts,
 	}, true
 }
 
 // classifyMode returns the transport mode based on speed profile.
 // Train heuristic: max speed exceeds threshold OR sustained avg >130 km/h
-// over any 10-minute window.
+// over any 10-minute window. Speeds are computed from coordinates.
 func classifyMode(pts []owntracks.Point, maxSpeed, threshold float64) TransportMode {
 	if maxSpeed >= threshold {
 		return ModeTrain
 	}
+	// Sustained-speed window: compute avg coordinate-derived speed over 10-min windows.
 	const windowSec = int64(600)
-	for i := 0; i < len(pts); i++ {
+	for i := 0; i < len(pts)-1; i++ {
 		windowStart := pts[i].Tst
-		var sumSpeed float64
-		count := 0
-		for j := i; j < len(pts) && pts[j].Tst-windowStart <= windowSec; j++ {
-			sumSpeed += pts[j].Vel
-			count++
+		var totalDist float64
+		for j := i + 1; j < len(pts) && pts[j].Tst-windowStart <= windowSec; j++ {
+			totalDist += HaversineKm(pts[j-1].Lat, pts[j-1].Lon, pts[j].Lat, pts[j].Lon)
 		}
-		if count >= 3 && sumSpeed/float64(count) > 130 {
+		elapsed := float64(min64(pts[len(pts)-1].Tst, windowStart+windowSec)-windowStart)
+		if elapsed > 0 && totalDist/elapsed*3600 > 130 {
 			return ModeTrain
 		}
 	}
 	return ModeCar
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
 }

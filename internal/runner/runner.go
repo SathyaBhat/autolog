@@ -13,7 +13,7 @@ import (
 	"github.com/sathyabhat/autolog/internal/trips"
 )
 
-const notifyThresholdKm = 100.0
+const notifyThresholdKm = 5.0
 const firstRunLookback = 24 * time.Hour
 
 // locationFetcher is the subset of owntracks.Client used by Runner.
@@ -140,7 +140,7 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 	for _, raw := range rawTrips {
 		trip, keep := trips.Classify(raw, classCfg)
 		if !keep {
-			r.log.Debug("trip discarded by exclusion zone",
+			r.log.Debug("trip discarded",
 				zap.Float64("start_lat", raw.Points[0].Lat),
 				zap.Float64("start_lon", raw.Points[0].Lon))
 			continue
