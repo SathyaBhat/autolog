@@ -26,7 +26,7 @@ func TestTelegram_Send(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	tg := notify.NewTelegramWithBaseURL(srv.URL, "testtoken", "12345")
+	tg := notify.NewTelegramWithBaseURL(srv.URL, "testtoken", "12345", "", nil)
 	trip := trips.Trip{
 		Date:       "2026-07-20",
 		StartTime:  time.Date(2026, 7, 20, 8, 0, 0, 0, time.UTC),

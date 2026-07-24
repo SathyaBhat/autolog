@@ -68,7 +68,7 @@ func main() {
 		if cfg.Telegram.BotToken == "" || cfg.Telegram.ChatID == "" {
 			log.Fatal("telegram.bot_token and telegram.chat_id are required when NOTIFY_STDOUT is not set")
 		}
-		notifier = notify.NewTelegram(cfg.Telegram.BotToken, cfg.Telegram.ChatID, geo)
+		notifier = notify.NewTelegram(cfg.Telegram.BotToken, cfg.Telegram.ChatID, cfg.Telegram.MessageThreadID, geo)
 		log.Info("notifications: telegram")
 	}
 	r := runner.New(cfg, ot, st, notifier, geo, log)

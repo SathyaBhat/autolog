@@ -16,27 +16,29 @@ const telegramBaseURL = "https://api.telegram.org"
 
 // Telegram sends messages to a Telegram chat via the Bot API.
 type Telegram struct {
-	baseURL  string
-	botToken string
-	chatID   string
-	http     *http.Client
-	geo      *geocode.Client
+	baseURL         string
+	botToken        string
+	chatID          string
+	messageThreadID string
+	http            *http.Client
+	geo             *geocode.Client
 }
 
 // NewTelegram creates a Telegram notifier using the official API base URL.
-func NewTelegram(botToken, chatID string, geo *geocode.Client) *Telegram {
-	return NewTelegramWithBaseURL(telegramBaseURL, botToken, chatID, geo)
+func NewTelegram(botToken, chatID, messageThreadID string, geo *geocode.Client) *Telegram {
+	return NewTelegramWithBaseURL(telegramBaseURL, botToken, chatID, messageThreadID, geo)
 }
 
 // NewTelegramWithBaseURL creates a Telegram notifier with a custom base URL
 // (used in tests to point at a local httptest server).
-func NewTelegramWithBaseURL(baseURL, botToken, chatID string, geo *geocode.Client) *Telegram {
+func NewTelegramWithBaseURL(baseURL, botToken, chatID, messageThreadID string, geo *geocode.Client) *Telegram {
 	return &Telegram{
-		baseURL:  baseURL,
-		botToken: botToken,
-		chatID:   chatID,
-		http:     &http.Client{Timeout: 10 * time.Second},
-		geo:      geo,
+		baseURL:         baseURL,
+		botToken:        botToken,
+		chatID:          chatID,
+		messageThreadID: messageThreadID,
+		http:            &http.Client{Timeout: 10 * time.Second},
+		geo:             geo,
 	}
 }
 
@@ -58,6 +60,9 @@ func (tg *Telegram) Send(ctx context.Context, t trips.Trip) error {
 	payload := map[string]string{
 		"chat_id": tg.chatID,
 		"text":    text,
+	}
+	if tg.messageThreadID != "" {
+		payload["message_thread_id"] = tg.messageThreadID
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
