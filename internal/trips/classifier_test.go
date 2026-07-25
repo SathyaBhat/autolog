@@ -22,7 +22,7 @@ func TestClassify_Car(t *testing.T) {
 		{Tst: now + 180, Lat: 51.5225, Lon: -0.1, Acc: 10},
 	}}
 	cfg := trips.ClassifierConfig{MaxTrainSpeedKmh: 150}
-	trip, keep := trips.Classify(raw, cfg)
+	trip, _, keep := trips.Classify(raw, cfg)
 	require.True(t, keep)
 	assert.Equal(t, trips.ModeCar, trip.Mode)
 	assert.Greater(t, trip.DistanceKm, 0.0)
@@ -37,7 +37,7 @@ func TestClassify_Train_MaxSpeed(t *testing.T) {
 		{Tst: now + 60, Lat: 51.8, Lon: -0.5, Acc: 10},
 	}}
 	cfg := trips.ClassifierConfig{MaxTrainSpeedKmh: 150}
-	trip, keep := trips.Classify(raw, cfg)
+	trip, _, keep := trips.Classify(raw, cfg)
 	require.True(t, keep)
 	assert.Equal(t, trips.ModeTrain, trip.Mode)
 }
@@ -54,7 +54,7 @@ func TestClassify_ExclusionZone_Start(t *testing.T) {
 			{Name: "station", Lat: 51.5, Lon: -0.1, RadiusM: 500},
 		},
 	}
-	_, keep := trips.Classify(raw, cfg)
+	_, _, keep := trips.Classify(raw, cfg)
 	assert.False(t, keep)
 }
 
@@ -70,6 +70,6 @@ func TestClassify_ExclusionZone_End(t *testing.T) {
 			{Name: "station", Lat: 51.5, Lon: -0.1, RadiusM: 500},
 		},
 	}
-	_, keep := trips.Classify(raw, cfg)
+	_, _, keep := trips.Classify(raw, cfg)
 	assert.False(t, keep)
 }

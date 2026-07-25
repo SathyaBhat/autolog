@@ -18,16 +18,11 @@ func NewStdout(geo *geocode.Client) *Stdout {
 	return &Stdout{geo: geo}
 }
 
-func (s *Stdout) Send(ctx context.Context, t trips.Trip) error {
-	if t.StartLocation != "" && t.EndLocation != "" {
-		fmt.Printf("🚗 %s: %s → %s, %.1f km\n", t.Date, t.StartLocation, t.EndLocation, t.DistanceKm)
-		return nil
+func (s *Stdout) SendAll(_ context.Context, ts []trips.Trip) error {
+	fmt.Println("🚙 New trips logged:")
+	for _, t := range ts {
+		startSyd := t.StartTime.In(sydneyTZ)
+		fmt.Printf("  • %s: %s, %.1f km\n", startSyd.Format("02 Jan 2006 15:04"), formatRoute(t), t.DistanceKm)
 	}
-	fmt.Printf("🚗 %s: %.4f,%.4f → %.4f,%.4f, %.1f km\n",
-		t.Date,
-		t.StartLat, t.StartLon,
-		t.EndLat, t.EndLon,
-		t.DistanceKm,
-	)
 	return nil
 }

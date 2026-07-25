@@ -1,6 +1,7 @@
 package trips
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/sathyabhat/autolog/internal/config"
@@ -12,14 +13,15 @@ type ClassifierConfig struct {
 	MaxTrainSpeedKmh float64
 	MinDistanceKm    float64
 	MaxAccM          float64
+	StopGap          time.Duration
 	ExclusionZones   []config.ExclusionZone
 }
 
 // Classify measures and classifies a RawTrip.
-// Returns (trip, true) if the trip should be stored, (Trip{}, false) if it
+// Returns (trip, reason, true) if the trip should be stored, (Trip{}, reason, false) if it
 // should be discarded (exclusion zone hit, too short, or all points inaccurate).
 // Train trips are stored but marked ModeTrain so they appear in the log.
-func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
+func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 	maxAcc := cfg.MaxAccM
 	if maxAcc <= 0 {
 		maxAcc = 100.0
@@ -33,7 +35,7 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 		}
 	}
 	if len(pts) < 2 {
-		return Trip{}, false
+		return Trip{}, "insufficient accurate points", false
 	}
 
 	first := pts[0]
@@ -41,7 +43,7 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 
 	if InExclusionZone(first.Lat, first.Lon, cfg.ExclusionZones) ||
 		InExclusionZone(last.Lat, last.Lon, cfg.ExclusionZones) {
-		return Trip{}, false
+		return Trip{}, "exclusion zone", false
 	}
 
 	// Compute distance and speed from coordinates, not reported vel.
@@ -64,10 +66,22 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 		minDist = 2.0
 	}
 	if distKm < minDist {
-		return Trip{}, false
+		return Trip{}, fmt.Sprintf("too short (%.2f km)", distKm), false
 	}
 
 	mode := classifyMode(pts, maxSpeed, cfg.MaxTrainSpeedKmh)
+
+	stopGap := cfg.StopGap
+	if stopGap <= 0 {
+		stopGap = 10 * time.Minute
+	}
+	var stops []StopPoint
+	for i := 1; i < len(pts); i++ {
+		gap := time.Duration(pts[i].Tst-pts[i-1].Tst) * time.Second
+		if gap >= stopGap {
+			stops = append(stops, StopPoint{Lat: pts[i].Lat, Lon: pts[i].Lon})
+		}
+	}
 
 	startTime := time.Unix(first.Tst, 0).UTC()
 	endTime := time.Unix(last.Tst, 0).UTC()
@@ -83,8 +97,9 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, bool) {
 		DistanceKm:  distKm,
 		MaxSpeedKmh: maxSpeed,
 		Mode:        mode,
+		StopPoints:  stops,
 		Points:      pts,
-	}, true
+	}, "", true
 }
 
 // classifyMode returns the transport mode based on speed profile.

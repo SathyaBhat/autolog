@@ -28,8 +28,8 @@ type stubNotifier struct {
 	sent []trips.Trip
 }
 
-func (s *stubNotifier) Send(_ context.Context, t trips.Trip) error {
-	s.sent = append(s.sent, t)
+func (s *stubNotifier) SendAll(_ context.Context, ts []trips.Trip) error {
+	s.sent = append(s.sent, ts...)
 	return nil
 }
 

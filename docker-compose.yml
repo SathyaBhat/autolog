@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     env_file:
       - path: .env
+    environment:
+      - STORE_PATH=/data/autolog.db
     volumes:
       - autolog-data:/data
     networks:

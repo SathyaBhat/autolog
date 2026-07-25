@@ -20,6 +20,13 @@ type RawTrip struct {
 	Points []owntracks.Point
 }
 
+// StopPoint is a coordinate where the device paused mid-trip (gap > stop_gap).
+type StopPoint struct {
+	Lat      float64
+	Lon      float64
+	Location string // filled in by runner after geocoding
+}
+
 // Trip is a classified, measured drive (or other movement).
 type Trip struct {
 	Date          string
@@ -34,5 +41,6 @@ type Trip struct {
 	Mode          TransportMode
 	StartLocation string
 	EndLocation   string
+	StopPoints    []StopPoint
 	Points        []owntracks.Point
 }

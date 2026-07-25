@@ -15,6 +15,8 @@ func makePoint(tst int64, lat, lon, vel float64) owntracks.Point {
 	return owntracks.Point{Tst: tst, Lat: lat, Lon: lon, Vel: vel, Acc: 10}
 }
 
+const testGap = 10 * time.Minute
+
 func TestSegment_SingleTrip(t *testing.T) {
 	now := time.Now().Unix()
 	points := []owntracks.Point{
@@ -22,30 +24,43 @@ func TestSegment_SingleTrip(t *testing.T) {
 		makePoint(now+60, 51.51, -0.11, 35),
 		makePoint(now+120, 51.52, -0.12, 28),
 	}
-	segs := trips.Segment(points)
+	segs := trips.Segment(points, testGap)
 	require.Len(t, segs, 1)
 	assert.Len(t, segs[0].Points, 3)
 }
 
-func TestSegment_TwoTrips_GapOver5Min(t *testing.T) {
+func TestSegment_TwoTrips_GapOverThreshold(t *testing.T) {
 	now := time.Now().Unix()
 	points := []owntracks.Point{
 		makePoint(now, 51.5, -0.1, 30),
 		makePoint(now+60, 51.51, -0.11, 35),
-		// gap of 10 min
-		makePoint(now+660, 51.6, -0.2, 20),
-		makePoint(now+720, 51.61, -0.21, 25),
+		// gap of 20 min — exceeds 10 min threshold
+		makePoint(now+1260, 51.6, -0.2, 20),
+		makePoint(now+1320, 51.61, -0.21, 25),
 	}
-	segs := trips.Segment(points)
+	segs := trips.Segment(points, testGap)
 	assert.Len(t, segs, 2)
 }
 
+func TestSegment_StitchedByLargerGap(t *testing.T) {
+	now := time.Now().Unix()
+	points := []owntracks.Point{
+		makePoint(now, 51.5, -0.1, 30),
+		makePoint(now+60, 51.51, -0.11, 35),
+		// gap of 20 min — within 90 min default, so still one trip
+		makePoint(now+1260, 51.6, -0.2, 20),
+		makePoint(now+1320, 51.61, -0.21, 25),
+	}
+	segs := trips.Segment(points, 90*time.Minute)
+	assert.Len(t, segs, 1)
+}
+
 func TestSegment_Empty(t *testing.T) {
-	segs := trips.Segment(nil)
+	segs := trips.Segment(nil, testGap)
 	assert.Empty(t, segs)
 }
 
 func TestSegment_SinglePoint(t *testing.T) {
-	segs := trips.Segment([]owntracks.Point{makePoint(1000, 51.5, -0.1, 0)})
+	segs := trips.Segment([]owntracks.Point{makePoint(1000, 51.5, -0.1, 0)}, testGap)
 	assert.Empty(t, segs)
 }

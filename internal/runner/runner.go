@@ -23,7 +23,7 @@ type locationFetcher interface {
 
 // Notifier sends trip notifications. *notify.Telegram and *notify.Stdout both satisfy this.
 type Notifier interface {
-	Send(ctx context.Context, t trips.Trip) error
+	SendAll(ctx context.Context, ts []trips.Trip) error
 }
 
 // geocoder resolves coordinates to a human-readable label.
@@ -127,22 +127,37 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 		return nil
 	}
 
-	rawTrips := trips.Segment(points)
+	rawTrips := trips.Segment(points, r.cfg.Filters.MaxTripGap)
 	r.log.Info("segmented trips", zap.Int("points", len(points)), zap.Int("trips", len(rawTrips)))
 
 	classCfg := trips.ClassifierConfig{
 		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
 		MinDistanceKm:    r.cfg.Filters.MinDistanceKm,
 		MaxAccM:          r.cfg.Filters.MaxAccM,
+		StopGap:          r.cfg.Filters.StopGap,
 		ExclusionZones:   r.cfg.Filters.ExclusionZones,
 	}
 
+	sydneyTZ, _ := time.LoadLocation("Australia/Sydney")
+	if sydneyTZ == nil {
+		sydneyTZ = time.UTC
+	}
+
+	var toNotify []trips.Trip
 	for _, raw := range rawTrips {
-		trip, keep := trips.Classify(raw, classCfg)
+		trip, reason, keep := trips.Classify(raw, classCfg)
 		if !keep {
-			r.log.Debug("trip discarded",
-				zap.Float64("start_lat", raw.Points[0].Lat),
-				zap.Float64("start_lon", raw.Points[0].Lon))
+			first := raw.Points[0]
+			last := raw.Points[len(raw.Points)-1]
+			startSyd := time.Unix(first.Tst, 0).In(sydneyTZ)
+			r.log.Info("trip discarded",
+				zap.String("reason", reason),
+				zap.String("start_time_syd", startSyd.Format("02 Jan 2006 15:04")),
+				zap.Float64("start_lat", first.Lat),
+				zap.Float64("start_lon", first.Lon),
+				zap.Float64("end_lat", last.Lat),
+				zap.Float64("end_lon", last.Lon),
+			)
 			continue
 		}
 
@@ -156,6 +171,13 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 				trip.EndLocation = endLoc.Label
 			} else {
 				r.log.Warn("geocode end failed", zap.Error(err))
+			}
+			for i := range trip.StopPoints {
+				if loc, err := r.geo.Reverse(ctx, trip.StopPoints[i].Lat, trip.StopPoints[i].Lon); err == nil {
+					trip.StopPoints[i].Location = loc.Label
+				} else {
+					r.log.Warn("geocode stop failed", zap.Error(err))
+				}
 			}
 		}
 
@@ -182,9 +204,13 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 		)
 
 		if trip.DistanceKm >= notifyThresholdKm && trip.Mode == trips.ModeCar {
-			if err := r.tg.Send(ctx, trip); err != nil {
-				r.log.Error("telegram notification failed", zap.Error(err))
-			}
+			toNotify = append(toNotify, trip)
+		}
+	}
+
+	if len(toNotify) > 0 {
+		if err := r.tg.SendAll(ctx, toNotify); err != nil {
+			r.log.Error("telegram notification failed", zap.Error(err))
 		}
 	}
 	return nil

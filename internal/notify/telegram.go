@@ -6,11 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sathyabhat/autolog/internal/geocode"
 	"github.com/sathyabhat/autolog/internal/trips"
 )
+
+var sydneyTZ = func() *time.Location {
+	loc, err := time.LoadLocation("Australia/Sydney")
+	if err != nil {
+		return time.UTC
+	}
+	return loc
+}()
 
 const telegramBaseURL = "https://api.telegram.org"
 
@@ -42,25 +51,18 @@ func NewTelegramWithBaseURL(baseURL, botToken, chatID, messageThreadID string, g
 	}
 }
 
-// Send posts a trip summary message to the configured Telegram chat.
-func (tg *Telegram) Send(ctx context.Context, t trips.Trip) error {
-	var from, to string
-	if t.StartLocation != "" {
-		from = t.StartLocation
-	} else {
-		from = fmt.Sprintf("%.4f,%.4f", t.StartLat, t.StartLon)
+// SendAll posts all trips as a single bulleted message to the configured Telegram chat.
+func (tg *Telegram) SendAll(ctx context.Context, ts []trips.Trip) error {
+	var lines []string
+	for _, t := range ts {
+		startSyd := t.StartTime.In(sydneyTZ)
+		lines = append(lines, fmt.Sprintf("• 🚙 %s %s (%.1f km)",
+			startSyd.Format("02 Jan 2006 15:04"),
+			formatRoute(t),
+			t.DistanceKm,
+		))
 	}
-	if t.EndLocation != "" {
-		to = t.EndLocation
-	} else {
-		to = fmt.Sprintf("%.4f,%.4f", t.EndLat, t.EndLon)
-	}
-	text := fmt.Sprintf("🚙 New trip logged: %s (%.1f km) %s -> %s",
-		t.StartTime.Format("2006-01-02 15:04"),
-		t.DistanceKm,
-		from,
-		to,
-	)
+	text := "🚙 New trips logged:\n" + strings.Join(lines, "\n")
 
 	payload := map[string]string{
 		"chat_id": tg.chatID,
