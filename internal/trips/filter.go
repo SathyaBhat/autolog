@@ -32,10 +32,28 @@ func isAnomalous(pts []owntracks.Point, i int, maxKmh float64) bool {
 		}
 	}
 
-	// Only middle points can be filtered based on speed.
-	// First and last points are only filtered for zero/negative time delta.
-	if i == 0 || i == len(pts)-1 {
+	// First point: check only the forward segment.
+	if i == 0 {
+		if len(pts) > 1 {
+			next := pts[1]
+			dt := float64(next.Tst - p.Tst)
+			if dt <= 0 {
+				return true
+			}
+			d := HaversineKm(p.Lat, p.Lon, next.Lat, next.Lon)
+			return d/dt*3600 > maxKmh
+		}
 		return false
+	}
+
+	// Last point: backward segment already checked via dt <= 0 guard above.
+	// Speed was already validated in the i > 0 block above (dt check passed),
+	// so now check the speed magnitude.
+	if i == len(pts)-1 {
+		prev := pts[i-1]
+		dt := float64(p.Tst - prev.Tst) // already known > 0 from the check above
+		d := HaversineKm(prev.Lat, prev.Lon, p.Lat, p.Lon)
+		return d/dt*3600 > maxKmh
 	}
 
 	// Middle point: both prev and next segments must be fast
