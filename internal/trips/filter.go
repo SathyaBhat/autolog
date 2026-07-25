@@ -47,6 +47,9 @@ func isAnomalous(pts []owntracks.Point, i int, maxKmh float64) bool {
 	prevFast := d1/dt1*3600 > maxKmh
 
 	dt2 := float64(next.Tst - p.Tst)
+	if dt2 <= 0 {
+		return true
+	}
 	d2 := HaversineKm(p.Lat, p.Lon, next.Lat, next.Lon)
 	nextFast := d2/dt2*3600 > maxKmh
 
