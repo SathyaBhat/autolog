@@ -56,7 +56,7 @@ func (tg *Telegram) SendAll(ctx context.Context, ts []trips.Trip) error {
 	var lines []string
 	for _, t := range ts {
 		startSyd := t.StartTime.In(sydneyTZ)
-		lines = append(lines, fmt.Sprintf("• 🚙 %s %s (%.1f km)",
+		lines = append(lines, fmt.Sprintf("• %s %s (%.1f km)",
 			startSyd.Format("02 Jan 2006 15:04"),
 			formatRoute(t),
 			t.DistanceKm,
