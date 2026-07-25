@@ -38,6 +38,9 @@ type StopPoint struct {
 	Location string // filled in by runner after geocoding
 }
 
+// OwnTracksPoint is a re-export of owntracks.Point for use by cmd/replay.
+type OwnTracksPoint = owntracks.Point
+
 // Trip is a classified, measured drive (or other movement).
 type Trip struct {
 	Date          string
