@@ -15,6 +15,11 @@ type ClassifierConfig struct {
 	MaxAccM          float64
 	StopGap          time.Duration
 	ExclusionZones   []config.ExclusionZone
+	Flags            AlgorithmFlags
+	AnomalyMaxKmh    float64 // used when Flags.AnomalyFilter is true; 0 → 500 km/h default
+	StayRadiusM      float64 // used when Flags.StaySegment is true; 0 → 50 m default
+	StayMinDur       time.Duration
+	StayMaxGap       time.Duration
 }
 
 // Classify measures and classifies a RawTrip.
