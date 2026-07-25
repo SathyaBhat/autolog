@@ -127,16 +127,31 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 		return nil
 	}
 
-	rawTrips := trips.Segment(points, r.cfg.Filters.MaxTripGap)
-	r.log.Info("segmented trips", zap.Int("points", len(points)), zap.Int("trips", len(rawTrips)))
-
 	classCfg := trips.ClassifierConfig{
 		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
 		MinDistanceKm:    r.cfg.Filters.MinDistanceKm,
 		MaxAccM:          r.cfg.Filters.MaxAccM,
 		StopGap:          r.cfg.Filters.StopGap,
 		ExclusionZones:   r.cfg.Filters.ExclusionZones,
+		Flags: trips.AlgorithmFlags{
+			AnomalyFilter:  r.cfg.Filters.AlgorithmFlags.AnomalyFilter,
+			StaySegment:    r.cfg.Filters.AlgorithmFlags.StaySegment,
+			SegmentVote:    r.cfg.Filters.AlgorithmFlags.SegmentVote,
+			AccelTrainGate: r.cfg.Filters.AlgorithmFlags.AccelTrainGate,
+		},
+		AnomalyMaxKmh: r.cfg.Filters.AnomalyMaxKmh,
+		StayRadiusM:   r.cfg.Filters.StayRadiusM,
+		StayMinDur:    r.cfg.Filters.StayMinDur,
+		StayMaxGap:    r.cfg.Filters.StayMaxGap,
 	}
+
+	var rawTrips []trips.RawTrip
+	if r.cfg.Filters.AlgorithmFlags.StaySegment {
+		rawTrips = trips.SegmentWithStays(points, classCfg)
+	} else {
+		rawTrips = trips.Segment(points, r.cfg.Filters.MaxTripGap)
+	}
+	r.log.Info("segmented trips", zap.Int("points", len(points)), zap.Int("trips", len(rawTrips)))
 
 	sydneyTZ, _ := time.LoadLocation("Australia/Sydney")
 	if sydneyTZ == nil {

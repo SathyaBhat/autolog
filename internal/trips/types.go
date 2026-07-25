@@ -6,6 +6,15 @@ import (
 	"github.com/sathyabhat/autolog/internal/owntracks"
 )
 
+// AlgorithmFlags selects which detection improvements are active.
+// All flags default to false (baseline behaviour preserved).
+type AlgorithmFlags struct {
+	AnomalyFilter  bool
+	StaySegment    bool
+	SegmentVote    bool
+	AccelTrainGate bool
+}
+
 // TransportMode is the detected mode of transport for a trip.
 type TransportMode string
 

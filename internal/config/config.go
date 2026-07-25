@@ -33,6 +33,14 @@ type SchedulerConfig struct {
 	Interval time.Duration `mapstructure:"interval"`
 }
 
+// AlgorithmFlags mirrors trips.AlgorithmFlags for YAML/env configuration.
+type AlgorithmFlags struct {
+	AnomalyFilter  bool `mapstructure:"anomaly_filter"`
+	StaySegment    bool `mapstructure:"stay_segment"`
+	SegmentVote    bool `mapstructure:"segment_vote"`
+	AccelTrainGate bool `mapstructure:"accel_train_gate"`
+}
+
 type FiltersConfig struct {
 	MaxTrainSpeedKmh float64         `mapstructure:"max_train_speed_kmh"`
 	MinDistanceKm    float64         `mapstructure:"min_distance_km"`
@@ -40,6 +48,11 @@ type FiltersConfig struct {
 	MaxTripGap       time.Duration   `mapstructure:"max_trip_gap"`
 	StopGap          time.Duration   `mapstructure:"stop_gap"`
 	ExclusionZones   []ExclusionZone `mapstructure:"exclusion_zones"`
+	AlgorithmFlags   AlgorithmFlags  `mapstructure:"algorithm_flags"`
+	StayRadiusM      float64         `mapstructure:"stay_radius_m"`
+	StayMinDur       time.Duration   `mapstructure:"stay_min_dur"`
+	StayMaxGap       time.Duration   `mapstructure:"stay_max_gap"`
+	AnomalyMaxKmh    float64         `mapstructure:"anomaly_max_kmh"`
 }
 
 type ExclusionZone struct {
@@ -68,6 +81,10 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("filters.stop_gap", 10*time.Minute)
 	v.SetDefault("store.path", "autolog.db")
 	v.SetDefault("log.level", "info")
+	v.SetDefault("filters.stay_radius_m", 50.0)
+	v.SetDefault("filters.stay_min_dur", 5*time.Minute)
+	v.SetDefault("filters.stay_max_gap", 5*time.Minute)
+	v.SetDefault("filters.anomaly_max_kmh", 500.0)
 
 	if cfgFile != "" {
 		v.SetConfigFile(cfgFile)

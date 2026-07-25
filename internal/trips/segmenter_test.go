@@ -64,3 +64,46 @@ func TestSegment_SinglePoint(t *testing.T) {
 	segs := trips.Segment([]owntracks.Point{makePoint(1000, 51.5, -0.1, 0)}, testGap)
 	assert.Empty(t, segs)
 }
+
+func TestSegmentWithStays_SplitsOnStay(t *testing.T) {
+	// Build a synthetic route: drive → park 6 min → drive again.
+	base := int64(1_700_000_000)
+	// Leg A: 5 moving points spaced 60 s apart, each ~800 m apart (~48 km/h)
+	legA := []owntracks.Point{
+		{Tst: base, Lat: -33.8600, Lon: 151.2000, Acc: 10},
+		{Tst: base + 60, Lat: -33.8528, Lon: 151.2000, Acc: 10},
+		{Tst: base + 120, Lat: -33.8456, Lon: 151.2000, Acc: 10},
+		{Tst: base + 180, Lat: -33.8384, Lon: 151.2000, Acc: 10},
+		{Tst: base + 240, Lat: -33.8312, Lon: 151.2000, Acc: 10},
+	}
+	// Stay: 7 points clustered within 20 m over 6 min
+	stayBase := base + 300
+	stay := []owntracks.Point{
+		{Tst: stayBase, Lat: -33.8312, Lon: 151.2001, Acc: 10},
+		{Tst: stayBase + 60, Lat: -33.8312, Lon: 151.2002, Acc: 10},
+		{Tst: stayBase + 120, Lat: -33.8313, Lon: 151.2001, Acc: 10},
+		{Tst: stayBase + 180, Lat: -33.8312, Lon: 151.2000, Acc: 10},
+		{Tst: stayBase + 240, Lat: -33.8311, Lon: 151.2001, Acc: 10},
+		{Tst: stayBase + 300, Lat: -33.8312, Lon: 151.2002, Acc: 10},
+		{Tst: stayBase + 360, Lat: -33.8313, Lon: 151.2000, Acc: 10},
+	}
+	// Leg B: 5 moving points
+	legBBase := stayBase + 420
+	legB := []owntracks.Point{
+		{Tst: legBBase, Lat: -33.8312, Lon: 151.2000, Acc: 10},
+		{Tst: legBBase + 60, Lat: -33.8240, Lon: 151.2000, Acc: 10},
+		{Tst: legBBase + 120, Lat: -33.8168, Lon: 151.2000, Acc: 10},
+		{Tst: legBBase + 180, Lat: -33.8096, Lon: 151.2000, Acc: 10},
+		{Tst: legBBase + 240, Lat: -33.8024, Lon: 151.2000, Acc: 10},
+	}
+	all := append(append(legA, stay...), legB...)
+	cfg := trips.ClassifierConfig{
+		Flags:       trips.AlgorithmFlags{StaySegment: true},
+		StayRadiusM: 100,
+		StayMinDur:  5 * time.Minute,
+		StayMaxGap:  5 * time.Minute,
+	}
+	segs := trips.SegmentWithStays(all, cfg)
+	// Expect 2 trips: legA and legB (stay is the boundary)
+	assert.GreaterOrEqual(t, len(segs), 2)
+}
