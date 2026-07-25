@@ -2,6 +2,7 @@ package trips
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/sathyabhat/autolog/internal/config"
@@ -74,7 +75,18 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 		return Trip{}, fmt.Sprintf("too short (%.2f km)", distKm), false
 	}
 
-	mode := classifyMode(pts, maxSpeed, cfg.MaxTrainSpeedKmh)
+	var mode TransportMode
+	if cfg.Flags.SegmentVote {
+		mode = classifyBySegmentVote(pts, cfg.MaxTrainSpeedKmh)
+	} else {
+		mode = classifyMode(pts, maxSpeed, cfg.MaxTrainSpeedKmh)
+	}
+
+	if mode == ModeTrain && cfg.Flags.AccelTrainGate {
+		if !confirmTrain(pts, maxSpeed) {
+			mode = ModeCar
+		}
+	}
 
 	stopGap := cfg.StopGap
 	if stopGap <= 0 {
@@ -135,4 +147,123 @@ func min64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// classifyBySegmentVote splits pts at >50% relative speed changes, classifies
+// each segment by average speed, then returns the mode with the most total
+// seconds. Speed ladder: ≤7 → walking, ≤20 → cycling, ≤120 → car, >120 → train.
+func classifyBySegmentVote(pts []owntracks.Point, trainThreshold float64) TransportMode {
+	type seg struct {
+		mode   TransportMode
+		durSec int64
+	}
+	var segments []seg
+	segStart := 0
+	prevSpeed := -1.0
+
+	flush := func(end int) {
+		if end <= segStart {
+			return
+		}
+		var dist float64
+		for k := segStart + 1; k <= end && k < len(pts); k++ {
+			dist += HaversineKm(pts[k-1].Lat, pts[k-1].Lon, pts[k].Lat, pts[k].Lon)
+		}
+		dur := pts[min64(int64(end), int64(len(pts)-1))].Tst - pts[segStart].Tst
+		if dur <= 0 {
+			return
+		}
+		avg := dist / float64(dur) * 3600
+		var m TransportMode
+		switch {
+		case avg <= 7:
+			m = ModeWalking
+		case avg <= 20:
+			m = ModeCycling
+		case avg <= 120:
+			m = ModeCar
+		default:
+			m = ModeTrain
+		}
+		segments = append(segments, seg{mode: m, durSec: dur})
+	}
+
+	for i := 1; i < len(pts); i++ {
+		dt := float64(pts[i].Tst - pts[i-1].Tst)
+		if dt <= 0 {
+			continue
+		}
+		d := HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
+		speed := d / dt * 3600
+		if prevSpeed > 0 && speed > 0 {
+			change := (speed - prevSpeed) / prevSpeed
+			if change > 0.5 || change < -0.5 {
+				flush(i - 1)
+				segStart = i - 1
+			}
+		}
+		prevSpeed = speed
+	}
+	flush(len(pts) - 1)
+
+	tally := map[TransportMode]int64{}
+	for _, s := range segments {
+		tally[s.mode] += s.durSec
+	}
+
+	var best TransportMode = ModeCar
+	var bestDur int64
+	for m, d := range tally {
+		if d > bestDur {
+			bestDur = d
+			best = m
+		}
+	}
+	return best
+}
+
+// confirmTrain returns true if the speed profile is consistent with rail:
+// average acceleration magnitude < 0.2 m/s² AND max/avg speed ratio < 1.3.
+func confirmTrain(pts []owntracks.Point, maxSpeed float64) bool {
+	if len(pts) < 3 {
+		return true // not enough data to refute
+	}
+	// Compute per-segment speeds in m/s.
+	speeds := make([]float64, 0, len(pts)-1)
+	for i := 1; i < len(pts); i++ {
+		dt := float64(pts[i].Tst - pts[i-1].Tst)
+		if dt <= 0 {
+			continue
+		}
+		d := HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon) * 1000
+		speeds = append(speeds, d/dt)
+	}
+	if len(speeds) < 2 {
+		return true
+	}
+	var totalAccel float64
+	for i := 1; i < len(speeds); i++ {
+		dt := float64(pts[i+1].Tst - pts[i].Tst)
+		if dt <= 0 {
+			continue
+		}
+		totalAccel += math.Abs(speeds[i]-speeds[i-1]) / dt
+	}
+	avgAccel := totalAccel / float64(len(speeds)-1)
+	if avgAccel >= 0.2 {
+		return false
+	}
+	var sumSpeed float64
+	for _, s := range speeds {
+		sumSpeed += s
+	}
+	avgSpeed := sumSpeed / float64(len(speeds))
+	if avgSpeed <= 0 {
+		return true
+	}
+	maxSpeedMs := maxSpeed / 3.6
+	if maxSpeedMs/avgSpeed >= 1.3 {
+		return false
+	}
+	return true
 }

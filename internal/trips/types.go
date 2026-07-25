@@ -22,6 +22,8 @@ const (
 	ModeCar     TransportMode = "car"
 	ModeTrain   TransportMode = "train"
 	ModeUnknown TransportMode = "unknown"
+	ModeWalking TransportMode = "walking"
+	ModeCycling TransportMode = "cycling"
 )
 
 // RawTrip is a contiguous sequence of GPS points with no gap >5 min.
