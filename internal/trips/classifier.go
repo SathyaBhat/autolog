@@ -151,7 +151,7 @@ func min64(a, b int64) int64 {
 
 // classifyBySegmentVote splits pts at >50% relative speed changes, classifies
 // each segment by average speed, then returns the mode with the most total
-// seconds. Speed ladder: ≤7 → walking, ≤20 → cycling, ≤120 → car, >120 → train.
+// seconds. Speed ladder: ≤7 → walking, ≤20 → cycling, ≤trainThreshold → car, >trainThreshold → train.
 func classifyBySegmentVote(pts []owntracks.Point, trainThreshold float64) TransportMode {
 	type seg struct {
 		mode   TransportMode
@@ -180,7 +180,7 @@ func classifyBySegmentVote(pts []owntracks.Point, trainThreshold float64) Transp
 			m = ModeWalking
 		case avg <= 20:
 			m = ModeCycling
-		case avg <= 120:
+		case avg <= trainThreshold:
 			m = ModeCar
 		default:
 			m = ModeTrain

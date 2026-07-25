@@ -149,7 +149,11 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 	if r.cfg.Filters.AlgorithmFlags.StaySegment {
 		rawTrips = trips.SegmentWithStays(points, classCfg)
 	} else {
-		rawTrips = trips.Segment(points, r.cfg.Filters.MaxTripGap)
+		pts := points
+		if r.cfg.Filters.AlgorithmFlags.AnomalyFilter {
+			pts = trips.FilterAnomalousPoints(pts, classCfg.AnomalyMaxKmh)
+		}
+		rawTrips = trips.Segment(pts, r.cfg.Filters.MaxTripGap)
 	}
 	r.log.Info("segmented trips", zap.Int("points", len(points)), zap.Int("trips", len(rawTrips)))
 
