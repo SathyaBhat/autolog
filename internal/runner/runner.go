@@ -180,23 +180,37 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 			continue
 		}
 
+		homeZones := r.cfg.Filters.HomeZones
+		applyHomeLabel := func(lat, lon float64, geocoded string) string {
+			if label := trips.HomeLabel(lat, lon, homeZones); label != "" {
+				return label
+			}
+			return geocoded
+		}
+
 		if r.geo != nil {
 			if startLoc, err := r.geo.Reverse(ctx, trip.StartLat, trip.StartLon); err == nil {
-				trip.StartLocation = startLoc.Label
+				trip.StartLocation = applyHomeLabel(trip.StartLat, trip.StartLon, startLoc.Label)
 			} else {
 				r.log.Warn("geocode start failed", zap.Error(err))
 			}
 			if endLoc, err := r.geo.Reverse(ctx, trip.EndLat, trip.EndLon); err == nil {
-				trip.EndLocation = endLoc.Label
+				trip.EndLocation = applyHomeLabel(trip.EndLat, trip.EndLon, endLoc.Label)
 			} else {
 				r.log.Warn("geocode end failed", zap.Error(err))
 			}
 			for i := range trip.StopPoints {
 				if loc, err := r.geo.Reverse(ctx, trip.StopPoints[i].Lat, trip.StopPoints[i].Lon); err == nil {
-					trip.StopPoints[i].Location = loc.Label
+					trip.StopPoints[i].Location = applyHomeLabel(trip.StopPoints[i].Lat, trip.StopPoints[i].Lon, loc.Label)
 				} else {
 					r.log.Warn("geocode stop failed", zap.Error(err))
 				}
+			}
+		} else {
+			trip.StartLocation = applyHomeLabel(trip.StartLat, trip.StartLon, trip.StartLocation)
+			trip.EndLocation = applyHomeLabel(trip.EndLat, trip.EndLon, trip.EndLocation)
+			for i := range trip.StopPoints {
+				trip.StopPoints[i].Location = applyHomeLabel(trip.StopPoints[i].Lat, trip.StopPoints[i].Lon, trip.StopPoints[i].Location)
 			}
 		}
 

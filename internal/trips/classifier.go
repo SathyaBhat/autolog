@@ -96,7 +96,12 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 	for i := 1; i < len(pts); i++ {
 		gap := time.Duration(pts[i].Tst-pts[i-1].Tst) * time.Second
 		if gap >= stopGap {
-			stops = append(stops, StopPoint{Lat: pts[i].Lat, Lon: pts[i].Lon})
+			stops = append(stops, StopPoint{
+				Lat:          pts[i-1].Lat,
+				Lon:          pts[i-1].Lon,
+				ArrivalTst:   pts[i-1].Tst,
+				DepartureTst: pts[i].Tst,
+			})
 		}
 	}
 

@@ -31,6 +31,18 @@ func InExclusionZone(lat, lon float64, zones []config.ExclusionZone) bool {
 	return false
 }
 
+// HomeLabel returns the zone Name if (lat, lon) falls within any home zone,
+// or "" if it does not match any zone.
+func HomeLabel(lat, lon float64, zones []config.ExclusionZone) string {
+	for _, z := range zones {
+		distM := HaversineKm(lat, lon, z.Lat, z.Lon) * 1000
+		if distM <= z.RadiusM {
+			return z.Name
+		}
+	}
+	return ""
+}
+
 func toRad(deg float64) float64 {
 	return deg * math.Pi / 180
 }

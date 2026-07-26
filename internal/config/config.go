@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +50,7 @@ type FiltersConfig struct {
 	MaxTripGap       time.Duration   `mapstructure:"max_trip_gap"`
 	StopGap          time.Duration   `mapstructure:"stop_gap"`
 	ExclusionZones   []ExclusionZone `mapstructure:"exclusion_zones"`
+	HomeZones        []ExclusionZone `mapstructure:"home_zones"`
 	AlgorithmFlags   AlgorithmFlags  `mapstructure:"algorithm_flags"`
 	StayRadiusM      float64         `mapstructure:"stay_radius_m"`
 	StayMinDur       time.Duration   `mapstructure:"stay_min_dur"`
@@ -120,11 +123,54 @@ func Load(cfgFile string) (*Config, error) {
 		return nil, fmt.Errorf("unmarshalling config: %w", err)
 	}
 
+	// Env vars append to (not replace) YAML-configured zones.
+	cfg.Filters.ExclusionZones = append(cfg.Filters.ExclusionZones, ParseZonesEnv("AUTOLOG_EXCLUSION_ZONES")...)
+	cfg.Filters.HomeZones = append(cfg.Filters.HomeZones, ParseZonesEnv("AUTOLOG_HOME_ZONES")...)
+
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+// ParseZonesEnv parses a semicolon-separated list of "lat,lon,radius_m,name" entries
+// from an env var. Entries without a name field are also accepted (name defaults to "").
+// Malformed entries are silently skipped.
+func ParseZonesEnv(envKey string) []ExclusionZone {
+	raw := os.Getenv(envKey)
+	if raw == "" {
+		return nil
+	}
+	var zones []ExclusionZone
+	for _, entry := range strings.Split(raw, ";") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, ",", 4)
+		if len(parts) < 3 {
+			continue
+		}
+		lat, err := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+		if err != nil {
+			continue
+		}
+		lon, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+		if err != nil {
+			continue
+		}
+		radius, err := strconv.ParseFloat(strings.TrimSpace(parts[2]), 64)
+		if err != nil {
+			continue
+		}
+		name := ""
+		if len(parts) == 4 {
+			name = strings.TrimSpace(parts[3])
+		}
+		zones = append(zones, ExclusionZone{Name: name, Lat: lat, Lon: lon, RadiusM: radius})
+	}
+	return zones
 }
 
 func (c *Config) validate() error {

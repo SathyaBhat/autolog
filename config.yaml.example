@@ -12,11 +12,22 @@ scheduler:
 
 filters:
   max_train_speed_kmh: 150
+  algorithm_flags:
+    anomaly_filter: true
+    accel_train_gate: true
   exclusion_zones:
-    - name: "home train station"
-      lat: 51.5074
-      lon: -0.1278
-      radius_m: 300
+    - name: "work"
+      lat: 0.0000
+      lon: 0.0000
+      radius_m: 500
+  home_zones:
+    - name: "Home"
+      lat: 0.0000
+      lon: 0.0000
+      radius_m: 500
+  # Zones can also be set via env vars (semicolon-separated, each entry is lat,lon,radius_m,name):
+  # AUTOLOG_HOME_ZONES="<lat>,<lon>,500,Home"
+  # AUTOLOG_EXCLUSION_ZONES="<lat>,<lon>,500,Work"
 
 store:
   path: "/data/autolog.db"

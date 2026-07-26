@@ -33,9 +33,11 @@ type RawTrip struct {
 
 // StopPoint is a coordinate where the device paused mid-trip (gap > stop_gap).
 type StopPoint struct {
-	Lat      float64
-	Lon      float64
-	Location string // filled in by runner after geocoding
+	Lat          float64
+	Lon          float64
+	Location     string // filled in by runner after geocoding
+	ArrivalTst   int64  // unix timestamp when the gap began (last point before pause)
+	DepartureTst int64  // unix timestamp when movement resumed (first point after pause)
 }
 
 // OwnTracksPoint is a re-export of owntracks.Point for use by cmd/replay.
