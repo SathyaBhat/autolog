@@ -21,6 +21,8 @@ type ClassifierConfig struct {
 	StayRadiusM      float64 // used when Flags.StaySegment is true; 0 → 50 m default
 	StayMinDur       time.Duration
 	StayMaxGap       time.Duration
+	TransitGap       time.Duration // min gap between consecutive points to flag as transit
+	TransitMinDistKm float64       // min distance across that gap to confirm transit
 }
 
 // Classify measures and classifies a RawTrip.
@@ -73,6 +75,10 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 	}
 	if distKm < minDist {
 		return Trip{}, fmt.Sprintf("too short (%.2f km)", distKm), false
+	}
+
+	if isTransit(pts, cfg.TransitGap, cfg.TransitMinDistKm) {
+		return Trip{}, "transit", false
 	}
 
 	var mode TransportMode
@@ -152,6 +158,26 @@ func min64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+// isTransit returns true if any consecutive pair of points has a time gap >=
+// transitGap and a distance >= transitMinDistKm. Zero/negative thresholds
+// disable the check.
+func isTransit(pts []owntracks.Point, transitGap time.Duration, transitMinDistKm float64) bool {
+	if transitGap <= 0 || transitMinDistKm <= 0 {
+		return false
+	}
+	gapSec := int64(transitGap.Seconds())
+	for i := 1; i < len(pts); i++ {
+		dt := pts[i].Tst - pts[i-1].Tst
+		if dt >= gapSec {
+			d := HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
+			if d >= transitMinDistKm {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // classifyBySegmentVote splits pts at >50% relative speed changes, classifies

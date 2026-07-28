@@ -42,6 +42,45 @@ func TestClassify_Train_MaxSpeed(t *testing.T) {
 	assert.Equal(t, trips.ModeTrain, trip.Mode)
 }
 
+func TestClassify_Transit_Discarded(t *testing.T) {
+	now := time.Now().Unix()
+	// Simulate a metro/bus trip: one segment with a 6-minute gap covering 6 km.
+	raw := trips.RawTrip{Points: []owntracks.Point{
+		{Tst: now, Lat: -33.730588, Lon: 150.944042, Acc: 10},
+		{Tst: now + 360, Lat: -33.777193, Lon: 151.117753, Acc: 72}, // 360s gap, ~17 km
+		{Tst: now + 720, Lat: -33.865145, Lon: 151.202092, Acc: 10},
+	}}
+	cfg := trips.ClassifierConfig{
+		MaxTrainSpeedKmh: 150,
+		TransitGap:       5 * time.Minute,
+		TransitMinDistKm: 5.0,
+	}
+	_, reason, keep := trips.Classify(raw, cfg)
+	assert.False(t, keep)
+	assert.Equal(t, "transit", reason)
+}
+
+func TestClassify_Transit_CarNotAffected(t *testing.T) {
+	now := time.Now().Unix()
+	// Normal car trip: frequent points, no single gap exceeding threshold.
+	raw := trips.RawTrip{Points: []owntracks.Point{
+		{Tst: now, Lat: -33.730, Lon: 150.918, Acc: 10},
+		{Tst: now + 60, Lat: -33.735, Lon: 150.925, Acc: 10},
+		{Tst: now + 120, Lat: -33.740, Lon: 150.932, Acc: 10},
+		{Tst: now + 180, Lat: -33.745, Lon: 150.939, Acc: 10},
+		{Tst: now + 240, Lat: -33.750, Lon: 150.946, Acc: 10},
+		{Tst: now + 300, Lat: -33.755, Lon: 150.953, Acc: 10},
+	}}
+	cfg := trips.ClassifierConfig{
+		MaxTrainSpeedKmh: 150,
+		TransitGap:       5 * time.Minute,
+		TransitMinDistKm: 5.0,
+	}
+	trip, _, keep := trips.Classify(raw, cfg)
+	assert.True(t, keep)
+	assert.Equal(t, trips.ModeCar, trip.Mode)
+}
+
 func TestClassify_ExclusionZone_Start(t *testing.T) {
 	now := time.Now().Unix()
 	raw := trips.RawTrip{Points: []owntracks.Point{

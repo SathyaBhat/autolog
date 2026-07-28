@@ -56,6 +56,8 @@ type FiltersConfig struct {
 	StayMinDur       time.Duration   `mapstructure:"stay_min_dur"`
 	StayMaxGap       time.Duration   `mapstructure:"stay_max_gap"`
 	AnomalyMaxKmh    float64         `mapstructure:"anomaly_max_kmh"`
+	TransitGap       time.Duration   `mapstructure:"transit_gap"`
+	TransitMinDistKm float64         `mapstructure:"transit_min_dist_km"`
 }
 
 type ExclusionZone struct {
@@ -82,6 +84,8 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("filters.max_acc_m", 100.0)
 	v.SetDefault("filters.max_trip_gap", 90*time.Minute)
 	v.SetDefault("filters.stop_gap", 10*time.Minute)
+	v.SetDefault("filters.transit_gap", 5*time.Minute)
+	v.SetDefault("filters.transit_min_dist_km", 5.0)
 	v.SetDefault("store.path", "autolog.db")
 	v.SetDefault("log.level", "info")
 	v.SetDefault("filters.stay_radius_m", 50.0)
@@ -109,6 +113,8 @@ func Load(cfgFile string) (*Config, error) {
 	_ = v.BindEnv("telegram.message_thread_id", "TELEGRAM_MESSAGE_THREAD_ID")
 	_ = v.BindEnv("scheduler.interval", "SCHEDULER_INTERVAL")
 	_ = v.BindEnv("filters.max_train_speed_kmh", "FILTERS_MAX_TRAIN_SPEED_KMH")
+	_ = v.BindEnv("filters.transit_gap", "FILTERS_TRANSIT_GAP")
+	_ = v.BindEnv("filters.transit_min_dist_km", "FILTERS_TRANSIT_MIN_DIST_KM")
 	_ = v.BindEnv("store.path", "STORE_PATH")
 	_ = v.BindEnv("log.level", "LOG_LEVEL")
 
