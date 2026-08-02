@@ -159,6 +159,70 @@ func TestClassify_AccelTrainGate_DowngradesJerkyHighSpeed(t *testing.T) {
 	assert.Equal(t, trips.ModeCar, trip.Mode)
 }
 
+func TestClassify_StopPoints_DwellClusterDetected(t *testing.T) {
+	// Reproduces a real trip: drive away, dwell 45 min at one spot pinging
+	// every 3 min (OwnTracks Move-mode timer cadence), drive to a second
+	// spot, dwell 9 min, drive back. Neither dwell has any single reporting
+	// gap >= stop_gap, so the old gap-only check would miss both. A bare
+	// 89-min reporting gap with no spatial cluster (monitoring mode switch)
+	// must NOT be reported as a stop.
+	now := time.Now().Unix()
+	var pts []owntracks.Point
+	add := func(offsetSec int64, lat, lon float64) {
+		pts = append(pts, owntracks.Point{Tst: now + offsetSec, Lat: lat, Lon: lon, Acc: 10})
+	}
+
+	// Drive away from start.
+	add(0, -33.7337, 150.9184)
+	add(60, -33.7280, 150.9250)
+	add(120, -33.7245, 150.9285)
+
+	// Dwell #1: ~45 min stationary, pinging every 3 min.
+	dwellStart := int64(180)
+	for i := int64(0); i <= 15; i++ {
+		add(dwellStart+i*180, -33.7239, 150.9303)
+	}
+	dwellEnd := dwellStart + 15*180 // 2880
+
+	// Drive to a second spot.
+	add(dwellEnd+120, -33.7200, 150.9260)
+	add(dwellEnd+240, -33.7183, 150.9209)
+
+	// Dwell #2: ~9 min stationary, pinging every 3 min.
+	dwell2Start := dwellEnd + 240 + 60
+	for i := int64(0); i <= 3; i++ {
+		add(dwell2Start+i*180, -33.7183, 150.9209)
+	}
+	dwell2End := dwell2Start + 3*180
+
+	// Drive back toward start.
+	add(dwell2End+120, -33.7250, 150.9200)
+	add(dwell2End+240, -33.7300, 150.9180)
+	lastMoving := dwell2End + 300
+	add(lastMoving, -33.7311, 150.9177)
+
+	// Monitoring mode switched to "Significant" on arrival: 89-min silence,
+	// no movement, single point after the gap. Must not appear as a stop.
+	add(lastMoving+89*60, -33.7311, 150.9177)
+
+	raw := trips.RawTrip{Points: pts}
+	cfg := trips.ClassifierConfig{
+		MaxTrainSpeedKmh: 150,
+		MinDistanceKm:    1,
+		StopGap:          10 * time.Minute,
+	}
+	trip, _, keep := trips.Classify(raw, cfg)
+	require.True(t, keep)
+	require.Len(t, trip.StopPoints, 2, "expected both dwell stops to be detected")
+
+	assert.InDelta(t, -33.7239, trip.StopPoints[0].Lat, 0.01)
+	assert.InDelta(t, 150.9303, trip.StopPoints[0].Lon, 0.01)
+	assert.Equal(t, dwellEnd-dwellStart, trip.StopPoints[0].DepartureTst-trip.StopPoints[0].ArrivalTst)
+
+	assert.InDelta(t, -33.7183, trip.StopPoints[1].Lat, 0.01)
+	assert.InDelta(t, 150.9209, trip.StopPoints[1].Lon, 0.01)
+}
+
 func TestClassify_AccelTrainGate_KeepsSmoothTrain(t *testing.T) {
 	// Smooth high-speed profile: consistent ~200 km/h, low acceleration variance.
 	// AccelTrainGate should keep as train.
