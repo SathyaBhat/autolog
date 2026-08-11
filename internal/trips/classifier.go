@@ -113,6 +113,8 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 			Lon:          s.CentLon,
 			ArrivalTst:   s.ArrivalTst,
 			DepartureTst: s.DepartureTst,
+			Confidence:   s.Confidence,
+			Evidence:     s.Evidence,
 		})
 	}
 
@@ -150,7 +152,7 @@ func classifyMode(pts []owntracks.Point, maxSpeed, threshold float64) TransportM
 		for j := i + 1; j < len(pts) && pts[j].Tst-windowStart <= windowSec; j++ {
 			totalDist += HaversineKm(pts[j-1].Lat, pts[j-1].Lon, pts[j].Lat, pts[j].Lon)
 		}
-		elapsed := float64(min64(pts[len(pts)-1].Tst, windowStart+windowSec)-windowStart)
+		elapsed := float64(min64(pts[len(pts)-1].Tst, windowStart+windowSec) - windowStart)
 		if elapsed > 0 && totalDist/elapsed*3600 > 130 {
 			return ModeTrain
 		}

@@ -20,12 +20,17 @@ import (
 	"github.com/sathyabhat/autolog/internal/owntracks"
 	"github.com/sathyabhat/autolog/internal/runner"
 	"github.com/sathyabhat/autolog/internal/store"
+	"github.com/sathyabhat/autolog/internal/trips"
 )
 
 func main() {
 	cfgFile := flag.String("config", "", "path to config.yaml (default: ./config.yaml)")
 	backfill := flag.Bool("backfill", false, "run a historical backfill and exit")
 	backfillFrom := flag.String("from", "", "start date for backfill, YYYY-MM-DD (required with -backfill)")
+	inspectDate := flag.String("inspect-date", "", "inspect a trip on local date YYYY-MM-DD")
+	inspectStart := flag.String("inspect-start", "", "trip start time HH:MM, used with -inspect-date")
+	inspectPoints := flag.Bool("inspect-points", false, "print every point during trip inspection")
+	reprocess := flag.Bool("reprocess", false, "replace the inspected trip in SQLite without notifying")
 	flag.Parse()
 
 	// Load .env if present; silently ignored when not found (e.g. in Docker where
@@ -76,6 +81,22 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if *inspectDate != "" || *inspectStart != "" || *reprocess {
+		if *inspectDate == "" || *inspectStart == "" {
+			log.Fatal("-inspect-date and -inspect-start are required for trip inspection/reprocessing")
+		}
+		target, err := parseReviewTarget(*inspectDate, *inspectStart)
+		if err != nil {
+			log.Fatal("invalid inspection target", zap.Error(err))
+		}
+		trip, err := r.ReviewTrip(ctx, target, *reprocess)
+		if err != nil {
+			log.Fatal("trip review failed", zap.Error(err))
+		}
+		printTripReview(trip, target, *reprocess, *inspectPoints)
+		return
+	}
+
 	if !*backfill && os.Getenv("BACKFILL") == "true" {
 		*backfill = true
 	}
@@ -107,6 +128,64 @@ func main() {
 		log.Fatal("runner exited with error", zap.Error(err))
 	}
 	log.Info("autolog stopped cleanly")
+}
+
+func parseReviewTarget(date, start string) (time.Time, error) {
+	loc, err := time.LoadLocation("Australia/Sydney")
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.ParseInLocation("2006-01-02 15:04", date+" "+start, loc)
+}
+
+func printTripReview(trip trips.Trip, target time.Time, reprocessed, showPoints bool) {
+	tagged, untagged := 0, 0
+	for _, point := range trip.Points {
+		if point.Tag == "drive" {
+			tagged++
+		} else {
+			untagged++
+		}
+	}
+
+	action := "inspection only"
+	if reprocessed {
+		action = "reprocessed into SQLite"
+	}
+	fmt.Printf("Trip %s (%s)\n", target.Format("2006-01-02 15:04 MST"), action)
+	fmt.Printf("  start: %s\n", trip.StartTime.In(target.Location()).Format("2006-01-02 15:04:05 MST"))
+	fmt.Printf("  end:   %s\n", trip.EndTime.In(target.Location()).Format("2006-01-02 15:04:05 MST"))
+	fmt.Printf("  route: %s -> %s\n", trip.StartLocation, trip.EndLocation)
+	fmt.Printf("  mode: %s, distance: %.2f km, max speed: %.1f km/h\n", trip.Mode, trip.DistanceKm, trip.MaxSpeedKmh)
+	fmt.Printf("  points: %d (%d tagged drive, %d untagged)\n", len(trip.Points), tagged, untagged)
+	if showPoints {
+		for i, point := range trip.Points {
+			fmt.Printf("    point %d: %s %.6f,%.6f tag=%q vel=%.1f acc=%.1f cog=%.1f activities=%v\n",
+				i+1,
+				time.Unix(point.Tst, 0).In(target.Location()).Format("15:04:05"),
+				point.Lat,
+				point.Lon,
+				point.Tag,
+				point.Vel,
+				point.Acc,
+				point.Cog,
+				point.MotionActivities,
+			)
+		}
+	}
+	fmt.Printf("  stops: %d\n", len(trip.StopPoints))
+	for i, stop := range trip.StopPoints {
+		arrival := time.Unix(stop.ArrivalTst, 0).In(target.Location())
+		departure := time.Unix(stop.DepartureTst, 0).In(target.Location())
+		fmt.Printf("    %d. %s -> %s (%.0f min, %s, %s)\n",
+			i+1,
+			arrival.Format("15:04"),
+			departure.Format("15:04"),
+			float64(stop.DepartureTst-stop.ArrivalTst)/60,
+			stop.Confidence,
+			stop.Evidence,
+		)
+	}
 }
 
 func buildLogger(level string) *zap.Logger {

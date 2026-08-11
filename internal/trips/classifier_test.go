@@ -1,6 +1,9 @@
 package trips_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,10 +19,10 @@ func TestClassify_Car(t *testing.T) {
 	now := time.Now().Unix()
 	// Points ~830m apart per 60s step ≈ 50 km/h computed speed, well under train threshold.
 	raw := trips.RawTrip{Points: []owntracks.Point{
-		{Tst: now, Lat: 51.5, Lon: -0.1, Acc: 10},
-		{Tst: now + 60, Lat: 51.5075, Lon: -0.1, Acc: 10},
-		{Tst: now + 120, Lat: 51.515, Lon: -0.1, Acc: 10},
-		{Tst: now + 180, Lat: 51.5225, Lon: -0.1, Acc: 10},
+		{Tst: now, Lat: 51.5, Lon: -0.1, Acc: 10, Tag: "drive"},
+		{Tst: now + 60, Lat: 51.5075, Lon: -0.1, Acc: 10, Tag: "drive"},
+		{Tst: now + 120, Lat: 51.515, Lon: -0.1, Acc: 10, Tag: "drive"},
+		{Tst: now + 180, Lat: 51.5225, Lon: -0.1, Acc: 10, Tag: "drive"},
 	}}
 	cfg := trips.ClassifierConfig{MaxTrainSpeedKmh: 150}
 	trip, _, keep := trips.Classify(raw, cfg)
@@ -64,12 +67,12 @@ func TestClassify_Transit_CarNotAffected(t *testing.T) {
 	now := time.Now().Unix()
 	// Normal car trip: frequent points, no single gap exceeding threshold.
 	raw := trips.RawTrip{Points: []owntracks.Point{
-		{Tst: now, Lat: -33.730, Lon: 150.918, Acc: 10},
-		{Tst: now + 60, Lat: -33.735, Lon: 150.925, Acc: 10},
-		{Tst: now + 120, Lat: -33.740, Lon: 150.932, Acc: 10},
-		{Tst: now + 180, Lat: -33.745, Lon: 150.939, Acc: 10},
-		{Tst: now + 240, Lat: -33.750, Lon: 150.946, Acc: 10},
-		{Tst: now + 300, Lat: -33.755, Lon: 150.953, Acc: 10},
+		{Tst: now, Lat: -33.730, Lon: 150.918, Acc: 10, Tag: "drive"},
+		{Tst: now + 60, Lat: -33.735, Lon: 150.925, Acc: 10, Tag: "drive"},
+		{Tst: now + 120, Lat: -33.740, Lon: 150.932, Acc: 10, Tag: "drive"},
+		{Tst: now + 180, Lat: -33.745, Lon: 150.939, Acc: 10, Tag: "drive"},
+		{Tst: now + 240, Lat: -33.750, Lon: 150.946, Acc: 10, Tag: "drive"},
+		{Tst: now + 300, Lat: -33.755, Lon: 150.953, Acc: 10, Tag: "drive"},
 	}}
 	cfg := trips.ClassifierConfig{
 		MaxTrainSpeedKmh: 150,
@@ -221,6 +224,53 @@ func TestClassify_StopPoints_DwellClusterDetected(t *testing.T) {
 
 	assert.InDelta(t, -33.7183, trip.StopPoints[1].Lat, 0.01)
 	assert.InDelta(t, 150.9209, trip.StopPoints[1].Lon, 0.01)
+}
+
+func TestClassify_RealTrip_2026Aug10SparseStop(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "2026-08-10-home-loop.json"))
+	require.NoError(t, err)
+
+	var points []owntracks.Point
+	require.NoError(t, json.Unmarshal(data, &points))
+
+	trip, reason, keep := trips.Classify(trips.RawTrip{Points: points}, trips.ClassifierConfig{
+		MaxTrainSpeedKmh: 150,
+		MinDistanceKm:    5,
+		StopGap:          10 * time.Minute,
+		StayMaxGap:       5 * time.Minute,
+	})
+	require.True(t, keep, reason)
+	require.Len(t, trip.StopPoints, 1)
+	assert.Equal(t, trips.ModeCar, trip.Mode)
+	assert.Equal(t, 11, countTagged(points, "drive"))
+	assert.Equal(t, 3, countUntagged(points))
+
+	stop := trip.StopPoints[0]
+	assert.Equal(t, trips.StopConfidenceHigh, stop.Confidence)
+	assert.Equal(t, int64(3216), stop.DepartureTst-stop.ArrivalTst)
+	assert.Equal(t, "drive tag cleared", stop.Evidence)
+	assert.InDelta(t, -33.767354, stop.Lat, 0.00001)
+	assert.InDelta(t, 150.888202, stop.Lon, 0.00001)
+}
+
+func countTagged(points []owntracks.Point, tag string) int {
+	count := 0
+	for _, p := range points {
+		if p.Tag == tag {
+			count++
+		}
+	}
+	return count
+}
+
+func countUntagged(points []owntracks.Point) int {
+	count := 0
+	for _, p := range points {
+		if p.Tag == "" {
+			count++
+		}
+	}
+	return count
 }
 
 func TestClassify_AccelTrainGate_KeepsSmoothTrain(t *testing.T) {

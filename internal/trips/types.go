@@ -31,13 +31,23 @@ type RawTrip struct {
 	Points []owntracks.Point
 }
 
-// StopPoint is a coordinate where the device paused mid-trip (gap > stop_gap).
+// StopConfidence describes how strongly the point data supports a stop.
+type StopConfidence string
+
+const (
+	StopConfidenceHigh   StopConfidence = "high"
+	StopConfidenceMedium StopConfidence = "medium"
+)
+
+// StopPoint is a coordinate where the device paused mid-trip.
 type StopPoint struct {
 	Lat          float64
 	Lon          float64
 	Location     string // filled in by runner after geocoding
 	ArrivalTst   int64  // unix timestamp when the gap began (last point before pause)
 	DepartureTst int64  // unix timestamp when movement resumed (first point after pause)
+	Confidence   StopConfidence
+	Evidence     string
 }
 
 // OwnTracksPoint is a re-export of owntracks.Point for use by cmd/replay.

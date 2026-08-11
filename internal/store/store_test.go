@@ -70,14 +70,23 @@ func TestSaveTrip_StoresPoints(t *testing.T) {
 
 	start := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
 	trip := trips.Trip{
-		Date:        "2026-07-20",
-		StartTime:   start,
-		EndTime:     start.Add(time.Hour),
-		StartLat:    51.5, StartLon: -0.1,
-		EndLat:      51.8, EndLon: -0.3,
-		DistanceKm:  30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
+		Date:      "2026-07-20",
+		StartTime: start,
+		EndTime:   start.Add(time.Hour),
+		StartLat:  51.5, StartLon: -0.1,
+		EndLat: 51.8, EndLon: -0.3,
+		DistanceKm: 30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
 		Points: []owntracks.Point{
-			{Tst: start.Unix(), Lat: 51.5, Lon: -0.1, Vel: 0, Acc: 5},
+			{
+				Tst:              start.Unix(),
+				Lat:              51.5,
+				Lon:              -0.1,
+				Vel:              0,
+				Acc:              5,
+				Cog:              180,
+				Tag:              "drive",
+				MotionActivities: []string{"stationary"},
+			},
 			{Tst: start.Unix() + 1800, Lat: 51.65, Lon: -0.2, Vel: 80, Acc: 8},
 			{Tst: start.Unix() + 3600, Lat: 51.8, Lon: -0.3, Vel: 0, Acc: 5},
 		},
@@ -91,6 +100,62 @@ func TestSaveTrip_StoresPoints(t *testing.T) {
 	assert.Equal(t, 51.5, pts[0].Lat)
 	assert.Equal(t, 51.65, pts[1].Lat)
 	assert.Equal(t, 51.8, pts[2].Lat)
+	assert.Equal(t, 180.0, pts[0].Cog)
+	assert.Equal(t, "drive", pts[0].Tag)
+	assert.Equal(t, []string{"stationary"}, pts[0].MotionActivities)
+}
+
+func TestSaveTrip_StoresStops(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+
+	start := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+	trip := trips.Trip{
+		Date: "2026-07-20", StartTime: start, EndTime: start.Add(time.Hour),
+		StartLat: 51.5, StartLon: -0.1, EndLat: 51.8, EndLon: -0.3,
+		DistanceKm: 30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
+		StopPoints: []trips.StopPoint{{
+			Lat:          51.65,
+			Lon:          -0.2,
+			ArrivalTst:   start.Unix() + 900,
+			DepartureTst: start.Unix() + 2700,
+			Location:     "Test stop",
+			Confidence:   trips.StopConfidenceHigh,
+			Evidence:     "repeated co-located points",
+		}},
+	}
+
+	require.NoError(t, s.SaveTrip(ctx, trip))
+
+	stops, err := s.GetTripStops(ctx, trip.Date, trip.StartTime)
+	require.NoError(t, err)
+	require.Len(t, stops, 1)
+	assert.Equal(t, trip.StopPoints[0], stops[0])
+}
+
+func TestSaveTripStopsIfMissing_BackfillsExistingTrip(t *testing.T) {
+	ctx := context.Background()
+	s := newTestStore(t)
+	start := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+	trip := trips.Trip{
+		Date: "2026-07-20", StartTime: start, EndTime: start.Add(time.Hour),
+		StartLat: 51.5, StartLon: -0.1, EndLat: 51.8, EndLon: -0.3,
+		DistanceKm: 30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
+	}
+	require.NoError(t, s.SaveTrip(ctx, trip))
+
+	stop := trips.StopPoint{
+		Lat: 51.65, Lon: -0.2,
+		ArrivalTst: start.Unix() + 900, DepartureTst: start.Unix() + 2700,
+		Confidence: trips.StopConfidenceHigh,
+	}
+	require.NoError(t, s.SaveTripStopsIfMissing(ctx, trip.Date, trip.StartTime, []trips.StopPoint{stop}))
+	require.NoError(t, s.SaveTripStopsIfMissing(ctx, trip.Date, trip.StartTime, []trips.StopPoint{stop}))
+
+	stops, err := s.GetTripStops(ctx, trip.Date, trip.StartTime)
+	require.NoError(t, err)
+	require.Len(t, stops, 1)
+	assert.Equal(t, stop, stops[0])
 }
 
 func TestSaveTrip_Idempotent_NoDoublePoints(t *testing.T) {
@@ -99,14 +164,14 @@ func TestSaveTrip_Idempotent_NoDoublePoints(t *testing.T) {
 
 	start := time.Date(2026, 7, 20, 11, 0, 0, 0, time.UTC)
 	trip := trips.Trip{
-		Date:        "2026-07-20",
-		StartTime:   start,
-		EndTime:     start.Add(time.Hour),
-		StartLat:    51.5, StartLon: -0.1,
-		EndLat:      51.8, EndLon: -0.3,
-		DistanceKm:  30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
+		Date:      "2026-07-20",
+		StartTime: start,
+		EndTime:   start.Add(time.Hour),
+		StartLat:  51.5, StartLon: -0.1,
+		EndLat: 51.8, EndLon: -0.3,
+		DistanceKm: 30, MaxSpeedKmh: 80, Mode: trips.ModeCar,
 		Points: []owntracks.Point{
-			{Tst: start.Unix(), Lat: 51.5, Lon: -0.1, Vel: 0, Acc: 5},
+			{Tst: start.Unix(), Lat: 51.5, Lon: -0.1, Vel: 0, Acc: 5, Tag: "drive"},
 		},
 	}
 
@@ -116,6 +181,7 @@ func TestSaveTrip_Idempotent_NoDoublePoints(t *testing.T) {
 	pts, err := s.GetTripPoints(ctx, "2026-07-20", start)
 	require.NoError(t, err)
 	assert.Len(t, pts, 1)
+	assert.Equal(t, "drive", pts[0].Tag)
 }
 
 func TestGeocodeCache_MissAndHit(t *testing.T) {
@@ -158,12 +224,12 @@ func TestSaveTrip_LocationColumns(t *testing.T) {
 
 	start := time.Date(2026, 7, 24, 8, 0, 0, 0, time.UTC)
 	trip := trips.Trip{
-		Date:          "2026-07-24",
-		StartTime:     start,
-		EndTime:       start.Add(time.Hour),
-		StartLat:      51.5, StartLon: -0.1,
-		EndLat:        51.8, EndLon: -0.3,
-		DistanceKm:    45, MaxSpeedKmh: 90, Mode: trips.ModeCar,
+		Date:      "2026-07-24",
+		StartTime: start,
+		EndTime:   start.Add(time.Hour),
+		StartLat:  51.5, StartLon: -0.1,
+		EndLat: 51.8, EndLon: -0.3,
+		DistanceKm: 45, MaxSpeedKmh: 90, Mode: trips.ModeCar,
 		StartLocation: "Oxford Street, Westminster",
 		EndLocation:   "High Street, Camden",
 	}

@@ -132,7 +132,7 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 		MinDistanceKm:    r.cfg.Filters.MinDistanceKm,
 		MaxAccM:          r.cfg.Filters.MaxAccM,
 		StopGap:          r.cfg.Filters.StopGap,
-		ExclusionZones: r.cfg.Filters.ExclusionZones,
+		ExclusionZones:   r.cfg.Filters.ExclusionZones,
 		Flags: trips.AlgorithmFlags{
 			AnomalyFilter:  r.cfg.Filters.AlgorithmFlags.AnomalyFilter,
 			StaySegment:    r.cfg.Filters.AlgorithmFlags.StaySegment,
@@ -221,6 +221,16 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 			return err
 		}
 		if exists {
+			if err := r.store.SaveTripStopsIfMissing(ctx, trip.Date, trip.StartTime, trip.StopPoints); err != nil {
+				return err
+			}
+			if len(trip.StopPoints) > 0 {
+				r.log.Info("trip stops backfilled",
+					zap.String("date", trip.Date),
+					zap.Time("start", trip.StartTime),
+					zap.Int("stops", len(trip.StopPoints)),
+				)
+			}
 			r.log.Debug("trip already stored, skipping",
 				zap.String("date", trip.Date),
 				zap.Time("start", trip.StartTime))
@@ -236,7 +246,21 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 			zap.Float64("distance_km", trip.DistanceKm),
 			zap.Float64("max_speed_kmh", trip.MaxSpeedKmh),
 			zap.String("mode", string(trip.Mode)),
+			zap.Int("stops", len(trip.StopPoints)),
 		)
+		for i, stop := range trip.StopPoints {
+			r.log.Info("stop detected",
+				zap.Int("index", i),
+				zap.Float64("lat", stop.Lat),
+				zap.Float64("lon", stop.Lon),
+				zap.Int64("arrival_tst", stop.ArrivalTst),
+				zap.Int64("departure_tst", stop.DepartureTst),
+				zap.Int64("duration_s", stop.DepartureTst-stop.ArrivalTst),
+				zap.String("confidence", string(stop.Confidence)),
+				zap.String("evidence", stop.Evidence),
+				zap.String("location", stop.Location),
+			)
+		}
 
 		if trip.DistanceKm >= notifyThresholdKm && trip.Mode == trips.ModeCar {
 			toNotify = append(toNotify, trip)

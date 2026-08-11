@@ -12,7 +12,7 @@ import (
 )
 
 func makePoint(tst int64, lat, lon, vel float64) owntracks.Point {
-	return owntracks.Point{Tst: tst, Lat: lat, Lon: lon, Vel: vel, Acc: 10}
+	return owntracks.Point{Tst: tst, Lat: lat, Lon: lon, Vel: vel, Acc: 10, Tag: "drive"}
 }
 
 const testGap = 10 * time.Minute
@@ -90,11 +90,11 @@ func TestSegmentWithStays_SplitsOnStay(t *testing.T) {
 	// Leg B: 5 moving points
 	legBBase := stayBase + 420
 	legB := []owntracks.Point{
-		{Tst: legBBase, Lat: -33.8312, Lon: 151.2000, Acc: 10},
-		{Tst: legBBase + 60, Lat: -33.8240, Lon: 151.2000, Acc: 10},
-		{Tst: legBBase + 120, Lat: -33.8168, Lon: 151.2000, Acc: 10},
-		{Tst: legBBase + 180, Lat: -33.8096, Lon: 151.2000, Acc: 10},
-		{Tst: legBBase + 240, Lat: -33.8024, Lon: 151.2000, Acc: 10},
+		{Tst: legBBase, Lat: -33.8312, Lon: 151.2000, Acc: 10, Tag: "drive"},
+		{Tst: legBBase + 60, Lat: -33.8240, Lon: 151.2000, Acc: 10, Tag: "drive"},
+		{Tst: legBBase + 120, Lat: -33.8168, Lon: 151.2000, Acc: 10, Tag: "drive"},
+		{Tst: legBBase + 180, Lat: -33.8096, Lon: 151.2000, Acc: 10, Tag: "drive"},
+		{Tst: legBBase + 240, Lat: -33.8024, Lon: 151.2000, Acc: 10, Tag: "drive"},
 	}
 	all := append(append(legA, stay...), legB...)
 	cfg := trips.ClassifierConfig{

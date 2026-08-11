@@ -16,7 +16,16 @@ import (
 
 func TestClient_Fetch(t *testing.T) {
 	pts := []owntracks.Point{
-		{Tst: 1700000000, Lat: 51.5, Lon: -0.1, Vel: 30, Acc: 10},
+		{
+			Tst:              1700000000,
+			Lat:              51.5,
+			Lon:              -0.1,
+			Vel:              30,
+			Acc:              10,
+			Cog:              275,
+			Tag:              "drive",
+			MotionActivities: []string{"automotive"},
+		},
 		{Tst: 1700000060, Lat: 51.51, Lon: -0.11, Vel: 32, Acc: 8},
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,6 +47,9 @@ func TestClient_Fetch(t *testing.T) {
 	assert.Len(t, got, 2)
 	assert.Equal(t, int64(1700000000), got[0].Tst)
 	assert.Equal(t, 51.5, got[0].Lat)
+	assert.Equal(t, 275.0, got[0].Cog)
+	assert.Equal(t, "drive", got[0].Tag)
+	assert.Equal(t, []string{"automotive"}, got[0].MotionActivities)
 }
 
 func TestClient_Fetch_EmptyResponse(t *testing.T) {

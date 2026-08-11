@@ -103,6 +103,24 @@ go run ./cmd/autolog -backfill -from 2026-01-01
 BACKFILL=true BACKFILL_FROM=2026-01-01 go run ./cmd/autolog
 ```
 
+### Inspect or reprocess one trip
+
+Review a past trip using the current OwnTracks data and classifier without changing the database:
+
+```bash
+go run ./cmd/autolog -inspect-date 2026-08-10 -inspect-start 17:58
+```
+
+Add `-inspect-points` to print every replayed GPS point and its OwnTracks metadata.
+
+Replace the matching stored trip's points, classification, and stops without sending a duplicate notification:
+
+```bash
+go run ./cmd/autolog -inspect-date 2026-08-10 -inspect-start 17:58 -reprocess
+```
+
+The time is interpreted in `Australia/Sydney`. The review prints the selected trip's mode, distance, tag counts, and each detected stop with duration, confidence, and evidence.
+
 ## Development
 
 ```bash

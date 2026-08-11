@@ -20,6 +20,10 @@ NOTIFY_STDOUT=true go run ./cmd/autolog
 # Backfill historical data
 go run ./cmd/autolog -backfill -from 2026-01-01
 
+# Inspect/reprocess one trip without duplicate notification
+go run ./cmd/autolog -inspect-date 2026-08-10 -inspect-start 17:58
+go run ./cmd/autolog -inspect-date 2026-08-10 -inspect-start 17:58 -reprocess
+
 # Replay stored trips through algorithm variants (once cmd/replay exists)
 go run ./cmd/replay --db autolog.db --days 30
 
