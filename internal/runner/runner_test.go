@@ -84,6 +84,39 @@ func TestRunner_ProcessOnce_NoNotificationUnder100km(t *testing.T) {
 	assert.Empty(t, tg.sent)
 }
 
+func TestRunner_ExplicitTrip_StoresTripBelowNormalMinimumAndNotifies(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	pts := []owntracks.Point{
+		{Tst: now.Unix(), Lat: -33.7317, Lon: 150.9135, Acc: 10},
+		{Tst: now.Add(60 * time.Second).Unix(), Lat: -33.7317, Lon: 150.9500, Acc: 10},
+	}
+
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+	tg := &stubNotifier{}
+	r := runner.NewWithDeps(
+		&config.Config{Filters: config.FiltersConfig{MaxTrainSpeedKmh: 150}},
+		&stubOwnTracks{points: pts},
+		st,
+		tg,
+		nil,
+		zap.NewNop(),
+	)
+
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+	trip, err := r.StopExplicitTrip(context.Background(), now.Add(2*time.Minute))
+	require.NoError(t, err)
+	assert.Equal(t, trips.ModeCar, trip.Mode)
+	assert.Less(t, trip.DistanceKm, 5.0)
+	require.Len(t, tg.sent, 1)
+	assert.Equal(t, trip.StartTime, tg.sent[0].StartTime)
+
+	active, err := st.GetActiveManualTripStart(context.Background())
+	require.NoError(t, err)
+	assert.True(t, active.IsZero())
+}
+
 func TestRunner_ProcessOnce_TaggedStopReachesNotificationAndStore(t *testing.T) {
 	now := time.Now().Unix()
 	pts := []owntracks.Point{

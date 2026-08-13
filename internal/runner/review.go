@@ -82,11 +82,12 @@ func (r *Runner) ReviewTrip(ctx context.Context, target time.Time, reprocess boo
 
 func (r *Runner) classifierConfig() trips.ClassifierConfig {
 	return trips.ClassifierConfig{
-		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
-		MinDistanceKm:    r.cfg.Filters.MinDistanceKm,
-		MaxAccM:          r.cfg.Filters.MaxAccM,
-		StopGap:          r.cfg.Filters.StopGap,
-		ExclusionZones:   r.cfg.Filters.ExclusionZones,
+		MaxTrainSpeedKmh:      r.cfg.Filters.MaxTrainSpeedKmh,
+		MinDistanceKm:         r.cfg.Filters.MinDistanceKm,
+		ExplicitMinDistanceKm: r.cfg.Filters.ExplicitMinDistanceKm,
+		MaxAccM:               r.cfg.Filters.MaxAccM,
+		StopGap:               r.cfg.Filters.StopGap,
+		ExclusionZones:        r.cfg.Filters.ExclusionZones,
 		Flags: trips.AlgorithmFlags{
 			AnomalyFilter:  r.cfg.Filters.AlgorithmFlags.AnomalyFilter,
 			StaySegment:    r.cfg.Filters.AlgorithmFlags.StaySegment,

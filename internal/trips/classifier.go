@@ -11,18 +11,20 @@ import (
 
 // ClassifierConfig controls the train-detection and exclusion-zone heuristics.
 type ClassifierConfig struct {
-	MaxTrainSpeedKmh float64
-	MinDistanceKm    float64
-	MaxAccM          float64
-	StopGap          time.Duration
-	ExclusionZones   []config.ExclusionZone
-	Flags            AlgorithmFlags
-	AnomalyMaxKmh    float64 // used when Flags.AnomalyFilter is true; 0 → 500 km/h default
-	StayRadiusM      float64 // used when Flags.StaySegment is true; 0 → 50 m default
-	StayMinDur       time.Duration
-	StayMaxGap       time.Duration
-	TransitGap       time.Duration // min gap between consecutive points to flag as transit
-	TransitMinDistKm float64       // min distance across that gap to confirm transit
+	MaxTrainSpeedKmh      float64
+	MinDistanceKm         float64
+	ExplicitMinDistanceKm float64
+	MaxAccM               float64
+	StopGap               time.Duration
+	ExclusionZones        []config.ExclusionZone
+	Flags                 AlgorithmFlags
+	AnomalyMaxKmh         float64 // used when Flags.AnomalyFilter is true; 0 → 500 km/h default
+	StayRadiusM           float64 // used when Flags.StaySegment is true; 0 → 50 m default
+	StayMinDur            time.Duration
+	StayMaxGap            time.Duration
+	TransitGap            time.Duration // min gap between consecutive points to flag as transit
+	TransitMinDistKm      float64       // min distance across that gap to confirm transit
+	ExplicitDrive         bool          // phone-triggered trip; bypasses normal discard filters
 }
 
 // Classify measures and classifies a RawTrip.
@@ -49,8 +51,9 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 	first := pts[0]
 	last := pts[len(pts)-1]
 
-	if InExclusionZone(first.Lat, first.Lon, cfg.ExclusionZones) ||
-		InExclusionZone(last.Lat, last.Lon, cfg.ExclusionZones) {
+	if !cfg.ExplicitDrive &&
+		(InExclusionZone(first.Lat, first.Lon, cfg.ExclusionZones) ||
+			InExclusionZone(last.Lat, last.Lon, cfg.ExclusionZones)) {
 		return Trip{}, "exclusion zone", false
 	}
 
@@ -70,14 +73,19 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 	}
 
 	minDist := cfg.MinDistanceKm
-	if minDist <= 0 {
+	if cfg.ExplicitDrive {
+		minDist = cfg.ExplicitMinDistanceKm
+		if minDist <= 0 {
+			minDist = 3.0
+		}
+	} else if minDist <= 0 {
 		minDist = 2.0
 	}
 	if distKm < minDist {
 		return Trip{}, fmt.Sprintf("too short (%.2f km)", distKm), false
 	}
 
-	if isTransit(pts, cfg.TransitGap, cfg.TransitMinDistKm) {
+	if !cfg.ExplicitDrive && isTransit(pts, cfg.TransitGap, cfg.TransitMinDistKm) {
 		return Trip{}, "transit", false
 	}
 
@@ -92,6 +100,9 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 		if !confirmTrain(pts, maxSpeed) {
 			mode = ModeCar
 		}
+	}
+	if cfg.ExplicitDrive {
+		mode = ModeCar
 	}
 
 	stopGap := cfg.StopGap

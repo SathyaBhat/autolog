@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/sathyabhat/autolog/internal/api"
 	"github.com/sathyabhat/autolog/internal/config"
 	"github.com/sathyabhat/autolog/internal/geocode"
 	"github.com/sathyabhat/autolog/internal/notify"
@@ -77,6 +79,29 @@ func main() {
 		log.Info("notifications: telegram")
 	}
 	r := runner.New(cfg, ot, st, notifier, geo, log)
+
+	var eventServer *http.Server
+	if cfg.HTTP.Addr != "" {
+		if cfg.HTTP.TripEventToken == "" {
+			log.Fatal("TRIP_EVENT_TOKEN is required when HTTP_ADDR is set")
+		}
+		eventServer = &http.Server{
+			Addr:              cfg.HTTP.Addr,
+			Handler:           api.NewTripEvents(r, cfg.HTTP.TripEventToken).Handler(),
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		go func() {
+			log.Info("trip event server listening", zap.String("addr", cfg.HTTP.Addr))
+			if err := eventServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("trip event server failed", zap.Error(err))
+			}
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = eventServer.Shutdown(shutdownCtx)
+		}()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

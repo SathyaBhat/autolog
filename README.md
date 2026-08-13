@@ -36,10 +36,16 @@ telegram:
 
 scheduler:
   interval: 6h
+  manual_trip_interval: 1m
+
+http:
+  addr: ":8080"
+  trip_event_token: "${TRIP_EVENT_TOKEN}"
 
 filters:
   max_train_speed_kmh: 150   # speeds above this classify the trip as train
   min_distance_km: 5.0       # trips shorter than this are discarded
+  explicit_min_distance_km: 3.0 # phone-triggered trips shorter than this are discarded
   max_acc_m: 100             # GPS points with accuracy worse than this are dropped
   exclusion_zones:
     - name: "home"
@@ -64,6 +70,10 @@ log:
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID to send messages to |
 | `SCHEDULER_INTERVAL` | How often to check for new trips (default: `6h`) |
+| `MANUAL_TRIP_INTERVAL` | How often to refresh an active phone-triggered trip (default: `1m`) |
+| `FILTERS_EXPLICIT_MIN_DISTANCE_KM` | Minimum distance for phone-triggered trips (default: `3.0`) |
+| `HTTP_ADDR` | Address for the phone trip-event API; empty disables it |
+| `TRIP_EVENT_TOKEN` | Bearer token required by the phone trip-event API |
 | `STORE_PATH` | Path to the SQLite database (default: `autolog.db`) |
 | `NOTIFY_STDOUT` | Set to `true` to print notifications to stdout instead of Telegram |
 | `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` (default: `info`) |
@@ -93,6 +103,37 @@ docker compose up -d
 
 The compose file expects a `dokploy-network` external network and an `.env` file for configuration. The database is stored in a named volume `autolog-data`.
 
+The included Traefik labels expose the API at:
+
+```text
+https://wraeclast.bishop-bass.ts.net/autolog/api/trips/start
+https://wraeclast.bishop-bass.ts.net/autolog/api/trips/stop
+```
+
+Traefik strips `/autolog` before forwarding the request to the container.
+
+### Generate the event token
+
+Generate a high-entropy token locally and add it to `.env`:
+
+```sh
+openssl rand -hex 32
+```
+
+Store the resulting value as:
+
+```dotenv
+TRIP_EVENT_TOKEN=the-generated-value
+```
+
+Keep `.env` out of git and restrict its permissions:
+
+```sh
+chmod 600 .env
+```
+
+Do not put the token in Traefik labels or the Shortcut URL. The Shortcut should send it in the `Authorization: Bearer ...` header.
+
 ### Backfill historical data
 
 To process historical location data from a specific date:
@@ -120,6 +161,20 @@ go run ./cmd/autolog -inspect-date 2026-08-10 -inspect-start 17:58 -reprocess
 ```
 
 The time is interpreted in `Australia/Sydney`. The review prints the selected trip's mode, distance, tag counts, and each detected stop with duration, confidence, and evidence.
+
+### Phone-triggered trips
+
+With `HTTP_ADDR` and `TRIP_EVENT_TOKEN` configured, iOS Shortcuts can call:
+
+```text
+POST /autolog/api/trips/start
+POST /api/trips/stop
+Authorization: Bearer <TRIP_EVENT_TOKEN>
+Content-Type: application/json
+{"timestamp":"2026-08-13T00:50:00Z"}
+```
+
+The start call persists the active trip. While it is active, autolog refreshes the partial trip at `MANUAL_TRIP_INTERVAL` without notifying. The stop call fetches the complete OwnTracks window, stores the final result as a car trip, and bypasses the normal transit, exclusion-zone, and minimum-distance discard filters.
 
 ## Development
 

@@ -7,6 +7,18 @@ services:
       - path: .env
     environment:
       - STORE_PATH=/data/autolog.db
+      - HTTP_ADDR=:8080
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      - "traefik.http.routers.autolog.rule=Host(`wraeclast.bishop-bass.ts.net`) && PathPrefix(`/autolog`)"
+      - "traefik.http.routers.autolog.entrypoints=web,websecure"
+      - "traefik.http.routers.autolog.tls=true"
+      - "traefik.http.routers.autolog.tls.certresolver=tailscale"
+      - "traefik.http.routers.autolog.tls.domains[0].main=wraeclast.bishop-bass.ts.net"
+      - "traefik.http.routers.autolog.middlewares=autolog-strip"
+      - "traefik.http.middlewares.autolog-strip.stripprefix.prefixes=/autolog"
+      - "traefik.http.services.autolog.loadbalancer.server.port=8080"
     volumes:
       - autolog-data:/data
     networks:

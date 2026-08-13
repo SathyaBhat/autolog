@@ -14,6 +14,7 @@ type Config struct {
 	OwnTracks OwnTracksConfig `mapstructure:"owntracks"`
 	Telegram  TelegramConfig  `mapstructure:"telegram"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
+	HTTP      HTTPConfig      `mapstructure:"http"`
 	Filters   FiltersConfig   `mapstructure:"filters"`
 	Store     StoreConfig     `mapstructure:"store"`
 	Log       LogConfig       `mapstructure:"log"`
@@ -32,7 +33,13 @@ type TelegramConfig struct {
 }
 
 type SchedulerConfig struct {
-	Interval time.Duration `mapstructure:"interval"`
+	Interval           time.Duration `mapstructure:"interval"`
+	ManualTripInterval time.Duration `mapstructure:"manual_trip_interval"`
+}
+
+type HTTPConfig struct {
+	Addr           string `mapstructure:"addr"`
+	TripEventToken string `mapstructure:"trip_event_token"`
 }
 
 // AlgorithmFlags mirrors trips.AlgorithmFlags for YAML/env configuration.
@@ -44,20 +51,21 @@ type AlgorithmFlags struct {
 }
 
 type FiltersConfig struct {
-	MaxTrainSpeedKmh float64         `mapstructure:"max_train_speed_kmh"`
-	MinDistanceKm    float64         `mapstructure:"min_distance_km"`
-	MaxAccM          float64         `mapstructure:"max_acc_m"`
-	MaxTripGap       time.Duration   `mapstructure:"max_trip_gap"`
-	StopGap          time.Duration   `mapstructure:"stop_gap"`
-	ExclusionZones   []ExclusionZone `mapstructure:"exclusion_zones"`
-	HomeZones        []ExclusionZone `mapstructure:"home_zones"`
-	AlgorithmFlags   AlgorithmFlags  `mapstructure:"algorithm_flags"`
-	StayRadiusM      float64         `mapstructure:"stay_radius_m"`
-	StayMinDur       time.Duration   `mapstructure:"stay_min_dur"`
-	StayMaxGap       time.Duration   `mapstructure:"stay_max_gap"`
-	AnomalyMaxKmh    float64         `mapstructure:"anomaly_max_kmh"`
-	TransitGap       time.Duration   `mapstructure:"transit_gap"`
-	TransitMinDistKm float64         `mapstructure:"transit_min_dist_km"`
+	MaxTrainSpeedKmh      float64         `mapstructure:"max_train_speed_kmh"`
+	MinDistanceKm         float64         `mapstructure:"min_distance_km"`
+	MaxAccM               float64         `mapstructure:"max_acc_m"`
+	MaxTripGap            time.Duration   `mapstructure:"max_trip_gap"`
+	ExplicitMinDistanceKm float64         `mapstructure:"explicit_min_distance_km"`
+	StopGap               time.Duration   `mapstructure:"stop_gap"`
+	ExclusionZones        []ExclusionZone `mapstructure:"exclusion_zones"`
+	HomeZones             []ExclusionZone `mapstructure:"home_zones"`
+	AlgorithmFlags        AlgorithmFlags  `mapstructure:"algorithm_flags"`
+	StayRadiusM           float64         `mapstructure:"stay_radius_m"`
+	StayMinDur            time.Duration   `mapstructure:"stay_min_dur"`
+	StayMaxGap            time.Duration   `mapstructure:"stay_max_gap"`
+	AnomalyMaxKmh         float64         `mapstructure:"anomaly_max_kmh"`
+	TransitGap            time.Duration   `mapstructure:"transit_gap"`
+	TransitMinDistKm      float64         `mapstructure:"transit_min_dist_km"`
 }
 
 type ExclusionZone struct {
@@ -79,10 +87,13 @@ func Load(cfgFile string) (*Config, error) {
 	v := viper.New()
 
 	v.SetDefault("scheduler.interval", 6*time.Hour)
+	v.SetDefault("scheduler.manual_trip_interval", time.Minute)
+	v.SetDefault("http.addr", "")
 	v.SetDefault("filters.max_train_speed_kmh", 150.0)
 	v.SetDefault("filters.min_distance_km", 5.0)
 	v.SetDefault("filters.max_acc_m", 100.0)
 	v.SetDefault("filters.max_trip_gap", 90*time.Minute)
+	v.SetDefault("filters.explicit_min_distance_km", 3.0)
 	v.SetDefault("filters.stop_gap", 10*time.Minute)
 	v.SetDefault("filters.transit_gap", 5*time.Minute)
 	v.SetDefault("filters.transit_min_dist_km", 5.0)
@@ -112,9 +123,13 @@ func Load(cfgFile string) (*Config, error) {
 	_ = v.BindEnv("telegram.chat_id", "TELEGRAM_CHAT_ID")
 	_ = v.BindEnv("telegram.message_thread_id", "TELEGRAM_MESSAGE_THREAD_ID")
 	_ = v.BindEnv("scheduler.interval", "SCHEDULER_INTERVAL")
+	_ = v.BindEnv("scheduler.manual_trip_interval", "MANUAL_TRIP_INTERVAL")
+	_ = v.BindEnv("http.addr", "HTTP_ADDR")
+	_ = v.BindEnv("http.trip_event_token", "TRIP_EVENT_TOKEN")
 	_ = v.BindEnv("filters.max_train_speed_kmh", "FILTERS_MAX_TRAIN_SPEED_KMH")
 	_ = v.BindEnv("filters.transit_gap", "FILTERS_TRANSIT_GAP")
 	_ = v.BindEnv("filters.transit_min_dist_km", "FILTERS_TRANSIT_MIN_DIST_KM")
+	_ = v.BindEnv("filters.explicit_min_distance_km", "FILTERS_EXPLICIT_MIN_DISTANCE_KM")
 	_ = v.BindEnv("store.path", "STORE_PATH")
 	_ = v.BindEnv("log.level", "LOG_LEVEL")
 

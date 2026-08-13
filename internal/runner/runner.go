@@ -2,6 +2,9 @@ package runner
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,12 +36,13 @@ type geocoder interface {
 
 // Runner orchestrates the fetch → segment → classify → store → notify pipeline.
 type Runner struct {
-	cfg   *config.Config
-	ot    locationFetcher
-	store *store.Store
-	tg    Notifier
-	geo   geocoder
-	log   *zap.Logger
+	cfg      *config.Config
+	ot       locationFetcher
+	store    *store.Store
+	tg       Notifier
+	geo      geocoder
+	log      *zap.Logger
+	manualMu sync.Mutex
 }
 
 // New creates a Runner with concrete dependencies.
@@ -51,10 +55,112 @@ func NewWithDeps(cfg *config.Config, ot locationFetcher, st *store.Store, tg Not
 	return &Runner{cfg: cfg, ot: ot, store: st, tg: tg, geo: geo, log: log}
 }
 
+// StartExplicitTrip records a phone-triggered drive start. The start survives
+// service restarts until a matching stop event completes the trip.
+func (r *Runner) StartExplicitTrip(ctx context.Context, start time.Time) error {
+	r.manualMu.Lock()
+	defer r.manualMu.Unlock()
+
+	active, err := r.store.GetActiveManualTripStart(ctx)
+	if err != nil {
+		return err
+	}
+	if !active.IsZero() {
+		return fmt.Errorf("an explicit trip is already active since %s", active.UTC().Format(time.RFC3339))
+	}
+	return r.store.SetActiveManualTripStart(ctx, start)
+}
+
+// StopExplicitTrip fetches exactly the OwnTracks window between the phone
+// events, classifies it as an explicit car trip, stores it, and notifies.
+func (r *Runner) StopExplicitTrip(ctx context.Context, end time.Time) (trips.Trip, error) {
+	r.manualMu.Lock()
+	defer r.manualMu.Unlock()
+
+	start, err := r.store.GetActiveManualTripStart(ctx)
+	if err != nil {
+		return trips.Trip{}, err
+	}
+	if start.IsZero() {
+		return trips.Trip{}, fmt.Errorf("no explicit trip is active")
+	}
+	if !end.After(start) {
+		return trips.Trip{}, fmt.Errorf("trip stop must be after trip start")
+	}
+
+	trip, ok, err := r.fetchExplicitTrip(ctx, start, end)
+	if err != nil {
+		return trips.Trip{}, err
+	}
+	if !ok {
+		return trips.Trip{}, fmt.Errorf("fewer than two accurate OwnTracks points found between start and stop")
+	}
+	r.annotateTrip(ctx, &trip)
+
+	if err := r.saveExplicitTrip(ctx, trip, true); err != nil {
+		return trips.Trip{}, err
+	}
+	if err := r.store.ClearActiveManualTripStart(ctx); err != nil {
+		return trips.Trip{}, err
+	}
+	return trip, nil
+}
+
+func (r *Runner) fetchExplicitTrip(ctx context.Context, start, end time.Time) (trips.Trip, bool, error) {
+	points, err := r.ot.Fetch(ctx, start.UTC(), end.UTC())
+	if err != nil {
+		return trips.Trip{}, false, err
+	}
+	filtered := make([]owntracks.Point, 0, len(points))
+	for _, p := range points {
+		if p.Tst >= start.Unix() && p.Tst <= end.Unix() {
+			filtered = append(filtered, p)
+		}
+	}
+	sort.Slice(filtered, func(i, j int) bool { return filtered[i].Tst < filtered[j].Tst })
+	if len(filtered) < 2 {
+		return trips.Trip{}, false, nil
+	}
+
+	cfg := r.classifierConfig()
+	cfg.ExplicitDrive = true
+	trip, reason, keep := trips.Classify(trips.RawTrip{Points: filtered}, cfg)
+	if !keep {
+		return trips.Trip{}, false, fmt.Errorf("explicit trip discarded: %s", reason)
+	}
+	return trip, true, nil
+}
+
+func (r *Runner) saveExplicitTrip(ctx context.Context, trip trips.Trip, notify bool) error {
+	exists, err := r.store.TripExists(ctx, trip.Date, trip.StartTime)
+	if err != nil {
+		return err
+	}
+	if exists {
+		if err := r.store.ReplaceTrip(ctx, trip); err != nil {
+			return err
+		}
+	} else if err := r.store.SaveTrip(ctx, trip); err != nil {
+		return err
+	}
+	if notify && r.tg != nil {
+		if err := r.tg.SendAll(ctx, []trips.Trip{trip}); err != nil {
+			r.log.Error("explicit trip notification failed", zap.Error(err))
+		}
+	}
+	return nil
+}
+
 // Run blocks, processing on each ticker tick, until ctx is cancelled.
 func (r *Runner) Run(ctx context.Context) error {
-	ticker := time.NewTicker(r.cfg.Scheduler.Interval)
-	defer ticker.Stop()
+	batchTicker := time.NewTicker(r.cfg.Scheduler.Interval)
+	defer batchTicker.Stop()
+	manualInterval := r.cfg.Scheduler.ManualTripInterval
+	if manualInterval <= 0 {
+		manualInterval = time.Minute
+	}
+	manualTicker := time.NewTicker(manualInterval)
+	defer manualTicker.Stop()
 
 	r.tick(ctx)
 
@@ -63,8 +169,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			r.log.Info("runner shutting down")
 			return ctx.Err()
-		case <-ticker.C:
+		case <-batchTicker.C:
 			r.tick(ctx)
+		case <-manualTicker.C:
+			r.refreshExplicitTrip(ctx)
 		}
 	}
 }
@@ -86,6 +194,22 @@ func (r *Runner) tick(ctx context.Context) {
 		from = last
 	}
 
+	active, err := r.store.GetActiveManualTripStart(ctx)
+	if err != nil {
+		r.log.Error("failed to get active explicit trip", zap.Error(err))
+		return
+	}
+	if !active.IsZero() {
+		if !from.Before(active) {
+			r.log.Debug("batch processing paused during explicit trip",
+				zap.Time("start", active))
+			return
+		}
+		if active.Before(to) {
+			to = active
+		}
+	}
+
 	if err := r.ProcessOnce(ctx, from, to); err != nil {
 		r.log.Error("process window failed", zap.Error(err))
 		return
@@ -94,6 +218,39 @@ func (r *Runner) tick(ctx context.Context) {
 	if err := r.store.SetLastProcessedTime(ctx, to); err != nil {
 		r.log.Error("failed to update last processed time", zap.Error(err))
 	}
+}
+
+// refreshExplicitTrip updates the stored partial trip while a phone-triggered
+// trip is active. It deliberately does not notify; stop is the commit point.
+func (r *Runner) refreshExplicitTrip(ctx context.Context) {
+	r.manualMu.Lock()
+	defer r.manualMu.Unlock()
+
+	start, err := r.store.GetActiveManualTripStart(ctx)
+	if err != nil {
+		r.log.Error("failed to get active explicit trip", zap.Error(err))
+		return
+	}
+	if start.IsZero() {
+		return
+	}
+
+	trip, ok, err := r.fetchExplicitTrip(ctx, start, time.Now().UTC())
+	if err != nil {
+		r.log.Warn("explicit trip refresh failed", zap.Error(err))
+		return
+	}
+	if !ok {
+		return
+	}
+	if err := r.saveExplicitTrip(ctx, trip, false); err != nil {
+		r.log.Error("explicit trip refresh save failed", zap.Error(err))
+		return
+	}
+	r.log.Debug("explicit trip refreshed",
+		zap.Time("start", trip.StartTime),
+		zap.Float64("distance_km", trip.DistanceKm),
+		zap.Int("points", len(trip.Points)))
 }
 
 // Backfill processes the full range [from, to] in monthly chunks to avoid
@@ -128,11 +285,12 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 	}
 
 	classCfg := trips.ClassifierConfig{
-		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
-		MinDistanceKm:    r.cfg.Filters.MinDistanceKm,
-		MaxAccM:          r.cfg.Filters.MaxAccM,
-		StopGap:          r.cfg.Filters.StopGap,
-		ExclusionZones:   r.cfg.Filters.ExclusionZones,
+		MaxTrainSpeedKmh:      r.cfg.Filters.MaxTrainSpeedKmh,
+		MinDistanceKm:         r.cfg.Filters.MinDistanceKm,
+		ExplicitMinDistanceKm: r.cfg.Filters.ExplicitMinDistanceKm,
+		MaxAccM:               r.cfg.Filters.MaxAccM,
+		StopGap:               r.cfg.Filters.StopGap,
+		ExclusionZones:        r.cfg.Filters.ExclusionZones,
 		Flags: trips.AlgorithmFlags{
 			AnomalyFilter:  r.cfg.Filters.AlgorithmFlags.AnomalyFilter,
 			StaySegment:    r.cfg.Filters.AlgorithmFlags.StaySegment,

@@ -395,6 +395,41 @@ func (s *Store) SetLastProcessedTime(ctx context.Context, t time.Time) error {
 	return err
 }
 
+const activeManualTripKey = "active_manual_trip_start"
+
+func (s *Store) GetActiveManualTripStart(ctx context.Context) (time.Time, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT value FROM state WHERE key = ?`, activeManualTripKey,
+	).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, err
+	}
+	t, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("parse active manual trip start: %w", err)
+	}
+	return t, nil
+}
+
+func (s *Store) SetActiveManualTripStart(ctx context.Context, t time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)`,
+		activeManualTripKey, t.UTC().Format(time.RFC3339Nano),
+	)
+	return err
+}
+
+func (s *Store) ClearActiveManualTripStart(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM state WHERE key = ?`, activeManualTripKey,
+	)
+	return err
+}
+
 func geoRound(v float64) float64 {
 	return math.Round(v*1e4) / 1e4
 }
