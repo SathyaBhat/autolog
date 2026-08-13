@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/sathyabhat/autolog/internal/api"
 	"github.com/sathyabhat/autolog/internal/trips"
@@ -31,14 +32,14 @@ func (f *fakeRunner) StopExplicitTrip(_ context.Context, t time.Time) (trips.Tri
 
 func TestTripEvents_StartAndStop(t *testing.T) {
 	fake := &fakeRunner{}
-	handler := api.NewTripEvents(fake, "secret").Handler()
+	handler := api.NewTripEvents(fake, "secret", zap.NewNop()).Handler()
 
 	start := httptest.NewRequest(http.MethodPost, "/api/trips/start",
 		strings.NewReader(`{"timestamp":"2026-08-13T00:50:00Z"}`))
 	start.Header.Set("Authorization", "Bearer secret")
 	startResp := httptest.NewRecorder()
 	handler.ServeHTTP(startResp, start)
-	require.Equal(t, http.StatusAccepted, startResp.Code)
+	require.Equal(t, http.StatusOK, startResp.Code)
 	require.Equal(t, time.Date(2026, 8, 13, 0, 50, 0, 0, time.UTC), fake.start)
 
 	stop := httptest.NewRequest(http.MethodPost, "/api/trips/stop",
@@ -51,7 +52,7 @@ func TestTripEvents_StartAndStop(t *testing.T) {
 }
 
 func TestTripEvents_RequiresToken(t *testing.T) {
-	handler := api.NewTripEvents(&fakeRunner{}, "secret").Handler()
+	handler := api.NewTripEvents(&fakeRunner{}, "secret", zap.NewNop()).Handler()
 	req := httptest.NewRequest(http.MethodPost, "/api/trips/start", nil)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, req)

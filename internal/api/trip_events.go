@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/sathyabhat/autolog/internal/trips"
 )
 
@@ -19,10 +21,15 @@ type tripEventRunner interface {
 type TripEvents struct {
 	runner tripEventRunner
 	token  string
+	log    *zap.Logger
 }
 
-func NewTripEvents(r tripEventRunner, token string) *TripEvents {
-	return &TripEvents{runner: r, token: token}
+func NewTripEvents(r tripEventRunner, token string, logs ...*zap.Logger) *TripEvents {
+	log := zap.NewNop()
+	if len(logs) > 0 && logs[0] != nil {
+		log = logs[0]
+	}
+	return &TripEvents{runner: r, token: token, log: log}
 }
 
 type eventRequest struct {
@@ -40,6 +47,9 @@ func (s *TripEvents) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := strings.TrimSpace(r.Header.Get("Authorization"))
 		if s.token == "" || !strings.EqualFold(strings.TrimPrefix(auth, "Bearer "), s.token) {
+			s.log.Warn("trip event unauthorized",
+				zap.String("path", r.URL.Path),
+				zap.String("remote_addr", r.RemoteAddr))
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -52,16 +62,22 @@ func (s *TripEvents) handleStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	s.log.Info("trip start event received", zap.String("remote_addr", r.RemoteAddr))
 	t, err := parseEventTime(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		s.log.Error("trip start event failed", zap.Error(err))
+		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
 	if err := s.runner.StartExplicitTrip(r.Context(), t); err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		s.log.Error("trip start event failed",
+			zap.Time("timestamp", t),
+			zap.Error(err))
+		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
-	writeJSON(w, http.StatusAccepted, map[string]any{"status": "started", "timestamp": t.UTC()})
+	s.log.Info("trip start event accepted", zap.Time("timestamp", t.UTC()))
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *TripEvents) handleStop(w http.ResponseWriter, r *http.Request) {
@@ -69,22 +85,27 @@ func (s *TripEvents) handleStop(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	s.log.Info("trip stop event received", zap.String("remote_addr", r.RemoteAddr))
 	t, err := parseEventTime(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		s.log.Error("trip stop event failed", zap.Error(err))
+		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
 	trip, err := s.runner.StopExplicitTrip(r.Context(), t)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+		s.log.Error("trip stop event failed",
+			zap.Time("timestamp", t),
+			zap.Error(err))
+		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
+	s.log.Info("trip stop event accepted",
+		zap.Time("timestamp", t.UTC()),
+		zap.String("date", trip.Date),
+		zap.Float64("distance_km", trip.DistanceKm))
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":      "stored",
-		"date":        trip.Date,
-		"start_time":  trip.StartTime,
-		"end_time":    trip.EndTime,
-		"distance_km": trip.DistanceKm,
+		"status": "ok",
 	})
 }
 

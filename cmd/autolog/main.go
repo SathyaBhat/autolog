@@ -87,7 +87,7 @@ func main() {
 		}
 		eventServer = &http.Server{
 			Addr:              cfg.HTTP.Addr,
-			Handler:           api.NewTripEvents(r, cfg.HTTP.TripEventToken).Handler(),
+			Handler:           api.NewTripEvents(r, cfg.HTTP.TripEventToken, log).Handler(),
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {

@@ -174,7 +174,7 @@ Content-Type: application/json
 {"timestamp":"2026-08-13T00:50:00Z"}
 ```
 
-The start call persists the active trip. While it is active, autolog refreshes the partial trip at `MANUAL_TRIP_INTERVAL` without notifying. The stop call fetches the complete OwnTracks window, stores the final result as a car trip, and bypasses the normal transit, exclusion-zone, and minimum-distance discard filters.
+The start call persists the active trip. While it is active, autolog refreshes the partial trip at `MANUAL_TRIP_INTERVAL` without notifying. The stop call fetches the complete OwnTracks window, stores the final result as a car trip, and bypasses the normal transit, exclusion-zone, and minimum-distance discard filters. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
 
 ## Development
 
