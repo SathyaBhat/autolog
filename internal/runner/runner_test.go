@@ -117,6 +117,30 @@ func TestRunner_ExplicitTrip_StoresTripBelowNormalMinimumAndNotifies(t *testing.
 	assert.True(t, active.IsZero())
 }
 
+func TestRunner_ExplicitTrip_StopClearsActiveTripWhenPointsAreMissing(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+
+	r := runner.NewWithDeps(
+		&config.Config{},
+		&stubOwnTracks{points: nil},
+		st,
+		&stubNotifier{},
+		nil,
+		zap.NewNop(),
+	)
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+
+	_, err = r.StopExplicitTrip(context.Background(), now.Add(time.Minute))
+	require.Error(t, err)
+
+	active, err := st.GetActiveManualTripStart(context.Background())
+	require.NoError(t, err)
+	assert.True(t, active.IsZero())
+}
+
 func TestRunner_ProcessOnce_TaggedStopReachesNotificationAndStore(t *testing.T) {
 	now := time.Now().Unix()
 	pts := []owntracks.Point{

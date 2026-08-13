@@ -87,6 +87,11 @@ func (r *Runner) StopExplicitTrip(ctx context.Context, end time.Time) (trips.Tri
 	if !end.After(start) {
 		return trips.Trip{}, fmt.Errorf("trip stop must be after trip start")
 	}
+	// A stop is terminal even when OwnTracks has no usable points. This keeps
+	// a failed test or interrupted drive from blocking the next start event.
+	if err := r.store.ClearActiveManualTripStart(ctx); err != nil {
+		return trips.Trip{}, err
+	}
 
 	trip, ok, err := r.fetchExplicitTrip(ctx, start, end)
 	if err != nil {
@@ -98,9 +103,6 @@ func (r *Runner) StopExplicitTrip(ctx context.Context, end time.Time) (trips.Tri
 	r.annotateTrip(ctx, &trip)
 
 	if err := r.saveExplicitTrip(ctx, trip, true); err != nil {
-		return trips.Trip{}, err
-	}
-	if err := r.store.ClearActiveManualTripStart(ctx); err != nil {
 		return trips.Trip{}, err
 	}
 	return trip, nil
