@@ -63,14 +63,18 @@ func (s *TripEvents) handleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("trip start event received", zap.String("remote_addr", r.RemoteAddr))
-	t, err := parseEventTime(r)
+	t, provided, payload, err := parseEventTime(r)
 	if err != nil {
-		s.log.Error("trip start event failed", zap.Error(err))
+		s.log.Error("trip start event failed",
+			zap.String("payload", payload),
+			zap.Error(err))
 		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
 	s.log.Info("trip start event submitted",
+		zap.String("payload", payload),
 		zap.Time("event_timestamp", t.UTC()),
+		zap.String("timestamp_source", timestampSource(provided)),
 		zap.Time("received_at", time.Now().UTC()))
 	if err := s.runner.StartExplicitTrip(r.Context(), t); err != nil {
 		s.log.Error("trip start event failed",
@@ -89,12 +93,19 @@ func (s *TripEvents) handleStop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("trip stop event received", zap.String("remote_addr", r.RemoteAddr))
-	t, err := parseEventTime(r)
+	t, provided, payload, err := parseEventTime(r)
 	if err != nil {
-		s.log.Error("trip stop event failed", zap.Error(err))
+		s.log.Error("trip stop event failed",
+			zap.String("payload", payload),
+			zap.Error(err))
 		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
+	s.log.Info("trip stop event submitted",
+		zap.String("payload", payload),
+		zap.Time("event_timestamp", t.UTC()),
+		zap.String("timestamp_source", timestampSource(provided)),
+		zap.Time("received_at", time.Now().UTC()))
 	trip, err := s.runner.StopExplicitTrip(r.Context(), t)
 	if err != nil {
 		s.log.Error("trip stop event failed",
@@ -112,18 +123,30 @@ func (s *TripEvents) handleStop(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func parseEventTime(r *http.Request) (time.Time, error) {
+func parseEventTime(r *http.Request) (time.Time, bool, string, error) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 4096))
+	if err != nil {
+		return time.Time{}, false, string(body), err
+	}
+	payload := string(body)
 	var req eventRequest
-	if r.Body != nil {
-		err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&req)
-		if err != nil && err != io.EOF {
-			return time.Time{}, err
+	if len(strings.TrimSpace(payload)) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			return time.Time{}, false, payload, err
 		}
 	}
 	if req.Timestamp == "" {
-		return time.Now().UTC(), nil
+		return time.Now().UTC(), false, payload, nil
 	}
-	return time.Parse(time.RFC3339Nano, req.Timestamp)
+	t, err := time.Parse(time.RFC3339Nano, req.Timestamp)
+	return t, true, payload, err
+}
+
+func timestampSource(provided bool) string {
+	if provided {
+		return "shortcut"
+	}
+	return "server_fallback"
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
