@@ -69,6 +69,9 @@ func (s *TripEvents) handleStart(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "error"})
 		return
 	}
+	s.log.Info("trip start event submitted",
+		zap.Time("event_timestamp", t.UTC()),
+		zap.Time("received_at", time.Now().UTC()))
 	if err := s.runner.StartExplicitTrip(r.Context(), t); err != nil {
 		s.log.Error("trip start event failed",
 			zap.Time("timestamp", t),
