@@ -4,14 +4,12 @@ Automatically logs car trips from [OwnTracks Recorder](https://owntracks.org/boo
 
 ## How it works
 
-On each scheduler tick (default: every 6 hours), autolog:
+Autolog is event-driven for live trips:
 
-1. Fetches location points from OwnTracks Recorder for the period since the last run
-2. Segments points into trips (a new trip begins after a >5 min gap)
-3. Classifies each trip by mode (car or train) based on speed profile
-4. Discards trips below the minimum distance or within configured exclusion zones
-5. Reverse-geocodes the start and end coordinates via [Nominatim](https://nominatim.openstreetmap.org/) (cached in SQLite)
-6. Stores new trips and notifies via Telegram or stdout
+1. A trip start event is accepted only when the device is in a configured home zone.
+2. Stop and start events away from home are treated as intermediate journey events.
+3. The journey remains active until a stop event arrives while the device is back in a home zone.
+4. The complete home-to-home journey is then classified, stored, and notified.
 
 ## Requirements
 
@@ -34,10 +32,6 @@ telegram:
   bot_token: "123456:ABC-DEF..."
   chat_id: "123456789"
 
-scheduler:
-  interval: 6h
-  manual_trip_interval: 1m
-
 http:
   addr: ":8080"
   trip_event_token: "${TRIP_EVENT_TOKEN}"
@@ -47,10 +41,11 @@ filters:
   min_distance_km: 5.0       # trips shorter than this are discarded
   explicit_min_distance_km: 3.0 # phone-triggered trips shorter than this are discarded
   max_acc_m: 100             # GPS points with accuracy worse than this are dropped
+  # A live trip must start and finish inside one of these home zones.
   exclusion_zones:
     - name: "home"
-      lat: -33.7317
-      lon: 150.9134
+      lat: 0.0000
+      lon: 0.0000
       radius_m: 300
 
 store:
@@ -69,8 +64,6 @@ log:
 | `OWNTRACKS_DEVICE` | OwnTracks device name |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID to send messages to |
-| `SCHEDULER_INTERVAL` | How often to check for new trips (default: `6h`) |
-| `MANUAL_TRIP_INTERVAL` | How often to refresh an active phone-triggered trip (default: `1m`) |
 | `FILTERS_EXPLICIT_MIN_DISTANCE_KM` | Minimum distance for phone-triggered trips (default: `3.0`) |
 | `HTTP_ADDR` | Address for the phone trip-event API; empty disables it |
 | `TRIP_EVENT_TOKEN` | Bearer token required by the phone trip-event API |
@@ -174,7 +167,7 @@ Content-Type: application/json
 {"timestamp":"2026-08-13T00:50:00Z"}
 ```
 
-The start call persists the active trip. While it is active, autolog refreshes the partial trip at `MANUAL_TRIP_INTERVAL` without notifying. The stop call fetches the complete OwnTracks window, stores the final result as a car trip, and bypasses the normal transit, exclusion-zone, and minimum-distance discard filters. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
+The start call persists a journey only when the device is at home. Repeated starts and stops away from home are continuation events; each away-from-home stop is stored as an explicit stop and the response is `{"status":"ongoing"}`. The next start closes that stop's departure time. A stop at home fetches the complete OwnTracks window, stores the final result as a car trip with the explicit stops, and returns `{"status":"completed"}`. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
 
 ## Development
 

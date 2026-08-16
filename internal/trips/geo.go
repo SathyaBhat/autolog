@@ -43,6 +43,10 @@ func HomeLabel(lat, lon float64, zones []config.ExclusionZone) string {
 	return ""
 }
 
+func InHomeZone(lat, lon float64, zones []config.ExclusionZone) bool {
+	return HomeLabel(lat, lon, zones) != ""
+}
+
 func toRad(deg float64) float64 {
 	return deg * math.Pi / 180
 }

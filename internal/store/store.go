@@ -396,6 +396,7 @@ func (s *Store) SetLastProcessedTime(ctx context.Context, t time.Time) error {
 }
 
 const activeManualTripKey = "active_manual_trip_start"
+const activeManualStopsKey = "active_manual_trip_stops"
 
 func (s *Store) GetActiveManualTripStart(ctx context.Context) (time.Time, error) {
 	var raw string
@@ -426,6 +427,43 @@ func (s *Store) SetActiveManualTripStart(ctx context.Context, t time.Time) error
 func (s *Store) ClearActiveManualTripStart(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM state WHERE key = ?`, activeManualTripKey,
+	)
+	return err
+}
+
+func (s *Store) GetActiveManualStops(ctx context.Context) ([]trips.StopPoint, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT value FROM state WHERE key = ?`, activeManualStopsKey,
+	).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var stops []trips.StopPoint
+	if err := json.Unmarshal([]byte(raw), &stops); err != nil {
+		return nil, fmt.Errorf("parse active manual stops: %w", err)
+	}
+	return stops, nil
+}
+
+func (s *Store) SetActiveManualStops(ctx context.Context, stops []trips.StopPoint) error {
+	raw, err := json.Marshal(stops)
+	if err != nil {
+		return fmt.Errorf("marshal active manual stops: %w", err)
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO state (key, value) VALUES (?, ?)`,
+		activeManualStopsKey, string(raw),
+	)
+	return err
+}
+
+func (s *Store) ClearActiveManualStops(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx,
+		`DELETE FROM state WHERE key = ?`, activeManualStopsKey,
 	)
 	return err
 }

@@ -13,7 +13,6 @@ import (
 type Config struct {
 	OwnTracks OwnTracksConfig `mapstructure:"owntracks"`
 	Telegram  TelegramConfig  `mapstructure:"telegram"`
-	Scheduler SchedulerConfig `mapstructure:"scheduler"`
 	HTTP      HTTPConfig      `mapstructure:"http"`
 	Filters   FiltersConfig   `mapstructure:"filters"`
 	Store     StoreConfig     `mapstructure:"store"`
@@ -30,11 +29,6 @@ type TelegramConfig struct {
 	BotToken        string `mapstructure:"bot_token"`
 	ChatID          string `mapstructure:"chat_id"`
 	MessageThreadID string `mapstructure:"message_thread_id"`
-}
-
-type SchedulerConfig struct {
-	Interval           time.Duration `mapstructure:"interval"`
-	ManualTripInterval time.Duration `mapstructure:"manual_trip_interval"`
 }
 
 type HTTPConfig struct {
@@ -86,8 +80,6 @@ type LogConfig struct {
 func Load(cfgFile string) (*Config, error) {
 	v := viper.New()
 
-	v.SetDefault("scheduler.interval", 6*time.Hour)
-	v.SetDefault("scheduler.manual_trip_interval", time.Minute)
 	v.SetDefault("http.addr", "")
 	v.SetDefault("filters.max_train_speed_kmh", 150.0)
 	v.SetDefault("filters.min_distance_km", 5.0)
@@ -122,8 +114,6 @@ func Load(cfgFile string) (*Config, error) {
 	_ = v.BindEnv("telegram.bot_token", "TELEGRAM_BOT_TOKEN")
 	_ = v.BindEnv("telegram.chat_id", "TELEGRAM_CHAT_ID")
 	_ = v.BindEnv("telegram.message_thread_id", "TELEGRAM_MESSAGE_THREAD_ID")
-	_ = v.BindEnv("scheduler.interval", "SCHEDULER_INTERVAL")
-	_ = v.BindEnv("scheduler.manual_trip_interval", "MANUAL_TRIP_INTERVAL")
 	_ = v.BindEnv("http.addr", "HTTP_ADDR")
 	_ = v.BindEnv("http.trip_event_token", "TRIP_EVENT_TOKEN")
 	_ = v.BindEnv("filters.max_train_speed_kmh", "FILTERS_MAX_TRAIN_SPEED_KMH")

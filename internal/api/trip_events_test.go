@@ -25,9 +25,9 @@ func (f *fakeRunner) StartExplicitTrip(_ context.Context, t time.Time) error {
 	return nil
 }
 
-func (f *fakeRunner) StopExplicitTrip(_ context.Context, t time.Time) (trips.Trip, error) {
+func (f *fakeRunner) StopExplicitTrip(_ context.Context, t time.Time) (trips.Trip, bool, error) {
 	f.stop = t
-	return trips.Trip{Date: "2026-08-13", DistanceKm: 1.2}, nil
+	return trips.Trip{Date: "2026-08-13", DistanceKm: 1.2}, true, nil
 }
 
 func TestTripEvents_StartAndStop(t *testing.T) {

@@ -52,7 +52,6 @@ func main() {
 	log.Info("autolog starting",
 		zap.String("owntracks_url", cfg.OwnTracks.URL),
 		zap.String("owntracks_device", cfg.OwnTracks.Device),
-		zap.Duration("scheduler_interval", cfg.Scheduler.Interval),
 		zap.String("store_path", cfg.Store.Path),
 	)
 

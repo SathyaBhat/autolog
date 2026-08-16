@@ -20,6 +20,11 @@ type stubOwnTracks struct {
 	points []owntracks.Point
 }
 
+const (
+	testHomeLat = 51.5000
+	testHomeLon = -0.1000
+)
+
 func (s *stubOwnTracks) Fetch(_ context.Context, _, _ time.Time) ([]owntracks.Point, error) {
 	return s.points, nil
 }
@@ -87,8 +92,9 @@ func TestRunner_ProcessOnce_NoNotificationUnder100km(t *testing.T) {
 func TestRunner_ExplicitTrip_StoresTripBelowNormalMinimumAndNotifies(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	pts := []owntracks.Point{
-		{Tst: now.Unix(), Lat: -33.7317, Lon: 150.9135, Acc: 10},
-		{Tst: now.Add(60 * time.Second).Unix(), Lat: -33.7317, Lon: 150.9500, Acc: 10},
+		{Tst: now.Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+		{Tst: now.Add(60 * time.Second).Unix(), Lat: 51.5000, Lon: -0.0750, Acc: 10},
+		{Tst: now.Add(120 * time.Second).Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
 	}
 
 	st, err := store.New(":memory:")
@@ -96,7 +102,10 @@ func TestRunner_ExplicitTrip_StoresTripBelowNormalMinimumAndNotifies(t *testing.
 	defer st.Close()
 	tg := &stubNotifier{}
 	r := runner.NewWithDeps(
-		&config.Config{Filters: config.FiltersConfig{MaxTrainSpeedKmh: 150}},
+		&config.Config{Filters: config.FiltersConfig{
+			MaxTrainSpeedKmh: 150,
+			HomeZones:        []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
+		}},
 		&stubOwnTracks{points: pts},
 		st,
 		tg,
@@ -105,8 +114,10 @@ func TestRunner_ExplicitTrip_StoresTripBelowNormalMinimumAndNotifies(t *testing.
 	)
 
 	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
-	trip, err := r.StopExplicitTrip(context.Background(), now.Add(2*time.Minute))
+	trip, completed, err := r.StopExplicitTrip(context.Background(), now.Add(2*time.Minute))
 	require.NoError(t, err)
+	assert.True(t, completed)
+	assert.Equal(t, now, trip.StartTime)
 	assert.Equal(t, trips.ModeCar, trip.Mode)
 	assert.Less(t, trip.DistanceKm, 5.0)
 	require.Len(t, tg.sent, 1)
@@ -124,8 +135,12 @@ func TestRunner_ExplicitTrip_StopClearsActiveTripWhenPointsAreMissing(t *testing
 	defer st.Close()
 
 	r := runner.NewWithDeps(
-		&config.Config{},
-		&stubOwnTracks{points: nil},
+		&config.Config{Filters: config.FiltersConfig{
+			HomeZones: []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
+		}},
+		&stubOwnTracks{points: []owntracks.Point{
+			{Tst: now.Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+		}},
 		st,
 		&stubNotifier{},
 		nil,
@@ -133,22 +148,112 @@ func TestRunner_ExplicitTrip_StopClearsActiveTripWhenPointsAreMissing(t *testing
 	)
 	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
 
-	_, err = r.StopExplicitTrip(context.Background(), now.Add(time.Minute))
+	_, _, err = r.StopExplicitTrip(context.Background(), now.Add(time.Minute))
 	require.Error(t, err)
+
+	active, err := st.GetActiveManualTripStart(context.Background())
+	require.NoError(t, err)
+	assert.False(t, active.IsZero())
+}
+
+func TestRunner_ExplicitTrip_IntermediateStopsContinueUntilHome(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	home := config.ExclusionZone{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}
+	points := []owntracks.Point{
+		{Tst: now.Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+		{Tst: now.Add(time.Minute).Unix(), Lat: 51.4800, Lon: -0.1200, Acc: 10},
+		{Tst: now.Add(2 * time.Minute).Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+	}
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+
+	r := runner.NewWithDeps(
+		&config.Config{Filters: config.FiltersConfig{
+			MaxTrainSpeedKmh: 150,
+			HomeZones:        []config.ExclusionZone{home},
+		}},
+		&stubOwnTracks{points: points},
+		st,
+		&stubNotifier{},
+		nil,
+		zap.NewNop(),
+	)
+
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+	_, completed, err := r.StopExplicitTrip(context.Background(), now.Add(time.Minute))
+	require.NoError(t, err)
+	assert.False(t, completed)
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now.Add(90*time.Second)))
+
+	trip, completed, err := r.StopExplicitTrip(context.Background(), now.Add(2*time.Minute))
+	require.NoError(t, err)
+	assert.True(t, completed)
+	assert.Equal(t, now, trip.StartTime)
+	require.Len(t, trip.StopPoints, 1)
+	assert.Equal(t, now.Add(time.Minute).Unix(), trip.StopPoints[0].ArrivalTst)
+	assert.Equal(t, now.Add(90*time.Second).Unix(), trip.StopPoints[0].DepartureTst)
 
 	active, err := st.GetActiveManualTripStart(context.Background())
 	require.NoError(t, err)
 	assert.True(t, active.IsZero())
 }
 
+func TestRunner_ExplicitTrip_MustStartAtHome(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+
+	r := runner.NewWithDeps(
+		&config.Config{Filters: config.FiltersConfig{
+			HomeZones: []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 100}},
+		}},
+		&stubOwnTracks{points: []owntracks.Point{
+			{Tst: now.Unix(), Lat: 51.4800, Lon: -0.1200, Acc: 10},
+		}},
+		st,
+		&stubNotifier{},
+		nil,
+		zap.NewNop(),
+	)
+
+	assert.ErrorContains(t, r.StartExplicitTrip(context.Background(), now), "must start at home")
+}
+
+func TestRunner_ExplicitTrip_AcceptsDelayedHomeFixAfterStart(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+
+	r := runner.NewWithDeps(
+		&config.Config{Filters: config.FiltersConfig{
+			HomeZones: []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
+		}},
+		&stubOwnTracks{points: []owntracks.Point{
+			{Tst: now.Add(10 * time.Minute).Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+		}},
+		st,
+		&stubNotifier{},
+		nil,
+		zap.NewNop(),
+	)
+
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+	active, err := st.GetActiveManualTripStart(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, now, active)
+}
+
 func TestRunner_ProcessOnce_TaggedStopReachesNotificationAndStore(t *testing.T) {
 	now := time.Now().Unix()
 	pts := []owntracks.Point{
-		{Tst: now, Lat: -33.7317, Lon: 150.9135, Vel: 40, Tag: "drive"},
-		{Tst: now + 300, Lat: -33.76736, Lon: 150.88814, Vel: 3, Tag: "drive"},
-		{Tst: now + 900, Lat: -33.76735, Lon: 150.88820, Vel: 0},
-		{Tst: now + 1200, Lat: -33.76972, Lon: 150.89626, Vel: 40, Tag: "drive"},
-		{Tst: now + 1500, Lat: -33.7302, Lon: 150.9188, Vel: 50, Tag: "drive"},
+		{Tst: now, Lat: 51.5000, Lon: -0.1000, Vel: 40, Tag: "drive"},
+		{Tst: now + 300, Lat: 51.5300, Lon: -0.1200, Vel: 3, Tag: "drive"},
+		{Tst: now + 900, Lat: 51.5301, Lon: -0.1201, Vel: 0},
+		{Tst: now + 1200, Lat: 51.5320, Lon: -0.1100, Vel: 40, Tag: "drive"},
+		{Tst: now + 1500, Lat: 51.5005, Lon: -0.0995, Vel: 50, Tag: "drive"},
 	}
 
 	st, err := store.New(":memory:")
@@ -178,11 +283,11 @@ func TestRunner_ReviewTrip_InspectAndReprocess(t *testing.T) {
 	target := time.Date(2026, 8, 10, 17, 58, 0, 0, loc)
 	start := target.Unix()
 	points := []owntracks.Point{
-		{Tst: start, Lat: -33.7317, Lon: 150.9135, Vel: 40, Tag: "drive"},
-		{Tst: start + 300, Lat: -33.76736, Lon: 150.88814, Vel: 3, Tag: "drive"},
-		{Tst: start + 900, Lat: -33.76735, Lon: 150.88820, Vel: 0},
-		{Tst: start + 1200, Lat: -33.76972, Lon: 150.89626, Vel: 40, Tag: "drive"},
-		{Tst: start + 1500, Lat: -33.7302, Lon: 150.9188, Vel: 50, Tag: "drive"},
+		{Tst: start, Lat: 51.5000, Lon: -0.1000, Vel: 40, Tag: "drive"},
+		{Tst: start + 300, Lat: 51.5300, Lon: -0.1200, Vel: 3, Tag: "drive"},
+		{Tst: start + 900, Lat: 51.5301, Lon: -0.1201, Vel: 0},
+		{Tst: start + 1200, Lat: 51.5320, Lon: -0.1100, Vel: 40, Tag: "drive"},
+		{Tst: start + 1500, Lat: 51.5005, Lon: -0.0995, Vel: 50, Tag: "drive"},
 	}
 
 	st, err := store.New(":memory:")

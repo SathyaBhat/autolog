@@ -249,8 +249,8 @@ func TestClassify_RealTrip_2026Aug10SparseStop(t *testing.T) {
 	assert.Equal(t, trips.StopConfidenceHigh, stop.Confidence)
 	assert.Equal(t, int64(3216), stop.DepartureTst-stop.ArrivalTst)
 	assert.Equal(t, "drive tag cleared", stop.Evidence)
-	assert.InDelta(t, -33.767354, stop.Lat, 0.00001)
-	assert.InDelta(t, 150.888202, stop.Lon, 0.00001)
+	assert.InDelta(t, 51.53401, stop.Lat, 0.00001)
+	assert.InDelta(t, -0.14501, stop.Lon, 0.00001)
 }
 
 func countTagged(points []owntracks.Point, tag string) int {

@@ -35,7 +35,6 @@ func TestLoad_Defaults(t *testing.T) {
 
 	cfg, err := config.Load("")
 	require.NoError(t, err)
-	assert.Equal(t, 6*60*60, int(cfg.Scheduler.Interval.Seconds()))
 	assert.Equal(t, 150.0, cfg.Filters.MaxTrainSpeedKmh)
 }
 

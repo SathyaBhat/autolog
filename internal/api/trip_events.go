@@ -15,7 +15,7 @@ import (
 
 type tripEventRunner interface {
 	StartExplicitTrip(context.Context, time.Time) error
-	StopExplicitTrip(context.Context, time.Time) (trips.Trip, error)
+	StopExplicitTrip(context.Context, time.Time) (trips.Trip, bool, error)
 }
 
 type TripEvents struct {
@@ -106,7 +106,7 @@ func (s *TripEvents) handleStop(w http.ResponseWriter, r *http.Request) {
 		zap.Time("event_timestamp", t.UTC()),
 		zap.String("timestamp_source", timestampSource(provided)),
 		zap.Time("received_at", time.Now().UTC()))
-	trip, err := s.runner.StopExplicitTrip(r.Context(), t)
+	trip, completed, err := s.runner.StopExplicitTrip(r.Context(), t)
 	if err != nil {
 		s.log.Error("trip stop event failed",
 			zap.Time("timestamp", t),
@@ -116,10 +116,16 @@ func (s *TripEvents) handleStop(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("trip stop event accepted",
 		zap.Time("timestamp", t.UTC()),
+		zap.Bool("completed", completed),
 		zap.String("date", trip.Date),
 		zap.Float64("distance_km", trip.DistanceKm))
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status": "ok",
+		"status": func() string {
+			if completed {
+				return "completed"
+			}
+			return "ongoing"
+		}(),
 	})
 }
 

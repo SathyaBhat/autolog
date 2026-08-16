@@ -33,7 +33,7 @@ go build ./...
 
 ## Architecture
 
-autolog is a single-binary Go daemon. On each scheduler tick it runs a linear pipeline: **fetch → filter → segment → classify → geocode → store → notify**.
+autolog is a single-binary Go daemon. Live trip completion is event-driven: a home start opens a journey, intermediate stop/start events keep it open, and a return-home stop runs **fetch → classify → geocode → store → notify**.
 
 ### Pipeline flow (`internal/runner/runner.go`)
 
