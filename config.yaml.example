@@ -7,6 +7,11 @@ telegram:
   bot_token: "123456:ABC-DEF..."
   chat_id: "123456789"
 
+http:
+  addr: ":8080"
+  trip_event_token: "${TRIP_EVENT_TOKEN}"
+  # The read-only MCP endpoint is available at /mcp on this server.
+
 filters:
   max_train_speed_kmh: 150
   # Extra radius allowed for a delayed first GPS fix when starting at home.

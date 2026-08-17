@@ -169,6 +169,40 @@ Content-Type: application/json
 
 The start call persists a journey only when the device is at home. Repeated starts and stops away from home are continuation events; each away-from-home stop is stored as an explicit stop and the response is `{"status":"ongoing"}`. The next start closes that stop's departure time. A stop at home fetches the complete OwnTracks window, stores the final result as a car trip with the explicit stops, and returns `{"status":"completed"}`. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
 
+### Query trips through MCP
+
+Autolog includes a read-only MCP server for asking an AI client about trip history.
+When `HTTP_ADDR` is configured, it is available at `/mcp` on the same HTTP server
+as the phone event API. It reads the same SQLite database and exposes `list_trips`,
+`trip_details`, and `trip_days` tools. The existing `TRIP_EVENT_TOKEN` is required
+as `Authorization: Bearer ...`.
+
+Build it once:
+
+```bash
+go build -o bin/autolog-mcp ./cmd/autolog-mcp
+MCP_TOKEN=the-generated-value ./bin/autolog-mcp -db /path/to/autolog.db -addr :8081
+```
+
+Register it with an MCP client using a configuration like:
+
+```json
+{
+  "mcpServers": {
+    "autolog": {
+      "url": "https://your-autolog-host/autolog/mcp",
+      "headers": {
+        "Authorization": "Bearer ${TRIP_EVENT_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+The `trip_days` tool is intended for questions such as "where did we take trips
+between Monday and Friday?"; `list_trips` handles more detailed filtering by date,
+location, and transport mode.
+
 ## Development
 
 ```bash

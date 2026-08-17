@@ -18,6 +18,7 @@ import (
 	"github.com/sathyabhat/autolog/internal/api"
 	"github.com/sathyabhat/autolog/internal/config"
 	"github.com/sathyabhat/autolog/internal/geocode"
+	"github.com/sathyabhat/autolog/internal/mcpserver"
 	"github.com/sathyabhat/autolog/internal/notify"
 	"github.com/sathyabhat/autolog/internal/owntracks"
 	"github.com/sathyabhat/autolog/internal/runner"
@@ -84,9 +85,17 @@ func main() {
 		if cfg.HTTP.TripEventToken == "" {
 			log.Fatal("TRIP_EVENT_TOKEN is required when HTTP_ADDR is set")
 		}
+		mcpHandler, err := mcpserver.HTTPHandler(st, "Australia/Sydney", cfg.HTTP.TripEventToken)
+		if err != nil {
+			log.Fatal("failed to configure MCP HTTP handler", zap.Error(err))
+		}
+		httpMux := http.NewServeMux()
+		httpMux.Handle("/mcp", mcpHandler)
+		httpMux.Handle("/mcp/", mcpHandler)
+		httpMux.Handle("/api/trips/", api.NewTripEvents(r, cfg.HTTP.TripEventToken, log).Handler())
 		eventServer = &http.Server{
 			Addr:              cfg.HTTP.Addr,
-			Handler:           api.NewTripEvents(r, cfg.HTTP.TripEventToken, log).Handler(),
+			Handler:           httpMux,
 			ReadHeaderTimeout: 5 * time.Second,
 		}
 		go func() {
