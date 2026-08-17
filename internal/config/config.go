@@ -48,6 +48,7 @@ type FiltersConfig struct {
 	MaxTrainSpeedKmh      float64         `mapstructure:"max_train_speed_kmh"`
 	MinDistanceKm         float64         `mapstructure:"min_distance_km"`
 	MaxAccM               float64         `mapstructure:"max_acc_m"`
+	StartHomeGraceM       float64         `mapstructure:"start_home_grace_m"`
 	MaxTripGap            time.Duration   `mapstructure:"max_trip_gap"`
 	ExplicitMinDistanceKm float64         `mapstructure:"explicit_min_distance_km"`
 	StopGap               time.Duration   `mapstructure:"stop_gap"`
@@ -84,6 +85,7 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("filters.max_train_speed_kmh", 150.0)
 	v.SetDefault("filters.min_distance_km", 5.0)
 	v.SetDefault("filters.max_acc_m", 100.0)
+	v.SetDefault("filters.start_home_grace_m", 500.0)
 	v.SetDefault("filters.max_trip_gap", 90*time.Minute)
 	v.SetDefault("filters.explicit_min_distance_km", 3.0)
 	v.SetDefault("filters.stop_gap", 10*time.Minute)

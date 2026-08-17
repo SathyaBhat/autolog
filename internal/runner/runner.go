@@ -18,6 +18,7 @@ import (
 
 const notifyThresholdKm = 5.0
 const startPointGrace = 15 * time.Minute
+const defaultStartHomeGraceM = 500.0
 
 // locationFetcher is the subset of owntracks.Client used by Runner.
 type locationFetcher interface {
@@ -88,10 +89,23 @@ func (r *Runner) StartExplicitTrip(ctx context.Context, start time.Time) error {
 	if err != nil {
 		return err
 	}
-	if !ok || !trips.InHomeZone(point.Lat, point.Lon, r.cfg.Filters.HomeZones) {
+	if !ok || !r.inStartHomeZone(point.Lat, point.Lon) {
 		return fmt.Errorf("explicit trip must start at home")
 	}
 	return r.store.SetActiveManualTripStart(ctx, start)
+}
+
+func (r *Runner) inStartHomeZone(lat, lon float64) bool {
+	graceM := r.cfg.Filters.StartHomeGraceM
+	if graceM <= 0 {
+		graceM = defaultStartHomeGraceM
+	}
+	for _, zone := range r.cfg.Filters.HomeZones {
+		if trips.HaversineKm(lat, lon, zone.Lat, zone.Lon)*1000 <= zone.RadiusM+graceM {
+			return true
+		}
+	}
+	return false
 }
 
 // StopExplicitTrip treats stops away from home as intermediate stops. The

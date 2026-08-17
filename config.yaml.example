@@ -9,6 +9,8 @@ telegram:
 
 filters:
   max_train_speed_kmh: 150
+  # Extra radius allowed for a delayed first GPS fix when starting at home.
+  start_home_grace_m: 500
   algorithm_flags:
     anomaly_filter: true
     accel_train_gate: true
