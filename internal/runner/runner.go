@@ -17,8 +17,6 @@ import (
 )
 
 const notifyThresholdKm = 5.0
-const startPointGrace = 15 * time.Minute
-const defaultStartHomeGraceM = 500.0
 
 // locationFetcher is the subset of owntracks.Client used by Runner.
 type locationFetcher interface {
@@ -85,27 +83,7 @@ func (r *Runner) StartExplicitTrip(ctx context.Context, start time.Time) error {
 	if len(r.cfg.Filters.HomeZones) == 0 {
 		return fmt.Errorf("cannot start explicit trip: no home zones configured")
 	}
-	point, ok, err := r.firstValidPointAfter(ctx, start)
-	if err != nil {
-		return err
-	}
-	if !ok || !r.inStartHomeZone(point.Lat, point.Lon) {
-		return fmt.Errorf("explicit trip must start at home")
-	}
 	return r.store.SetActiveManualTripStart(ctx, start)
-}
-
-func (r *Runner) inStartHomeZone(lat, lon float64) bool {
-	graceM := r.cfg.Filters.StartHomeGraceM
-	if graceM <= 0 {
-		graceM = defaultStartHomeGraceM
-	}
-	for _, zone := range r.cfg.Filters.HomeZones {
-		if trips.HaversineKm(lat, lon, zone.Lat, zone.Lon)*1000 <= zone.RadiusM+graceM {
-			return true
-		}
-	}
-	return false
 }
 
 // StopExplicitTrip treats stops away from home as intermediate stops. The
@@ -179,26 +157,6 @@ func (r *Runner) StopExplicitTrip(ctx context.Context, end time.Time) (trips.Tri
 		return trips.Trip{}, false, err
 	}
 	return trip, true, nil
-}
-
-func (r *Runner) firstValidPointAfter(ctx context.Context, target time.Time) (owntracks.Point, bool, error) {
-	points, err := r.ot.Fetch(ctx, target.UTC(), target.Add(startPointGrace).UTC())
-	if err != nil {
-		return owntracks.Point{}, false, err
-	}
-	sort.Slice(points, func(i, j int) bool {
-		return points[i].Tst < points[j].Tst
-	})
-	maxAcc := r.cfg.Filters.MaxAccM
-	if maxAcc <= 0 {
-		maxAcc = 100
-	}
-	for _, point := range points {
-		if point.Tst >= target.Unix() && point.Acc <= maxAcc {
-			return point, true, nil
-		}
-	}
-	return owntracks.Point{}, false, nil
 }
 
 func (r *Runner) fetchJourneyPoints(ctx context.Context, start, end time.Time) ([]owntracks.Point, error) {

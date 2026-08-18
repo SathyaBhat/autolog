@@ -6,7 +6,7 @@ Automatically logs car trips from [OwnTracks Recorder](https://owntracks.org/boo
 
 Autolog is event-driven for live trips:
 
-1. A trip start event is accepted only when the device is in a configured home zone.
+1. A trip start event records the explicit start time immediately.
 2. Stop and start events away from home are treated as intermediate journey events.
 3. The journey remains active until a stop event arrives while the device is back in a home zone.
 4. The complete home-to-home journey is then classified, stored, and notified.
@@ -167,7 +167,7 @@ Content-Type: application/json
 {"timestamp":"2026-08-13T00:50:00Z"}
 ```
 
-The start call persists a journey only when the device is at home. Repeated starts and stops away from home are continuation events; each away-from-home stop is stored as an explicit stop and the response is `{"status":"ongoing"}`. The next start closes that stop's departure time. A stop at home fetches the complete OwnTracks window, stores the final result as a car trip with the explicit stops, and returns `{"status":"completed"}`. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
+The start call records the explicit start time without waiting for a GPS fix. Repeated starts and stops away from home are continuation events; each away-from-home stop is stored as an explicit stop and the response is `{"status":"ongoing"}`. The next start closes that stop's departure time. A stop at home fetches the complete OwnTracks window, stores the final result as a car trip with the explicit stops, and returns `{"status":"completed"}`. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
 
 ### Query trips through MCP
 

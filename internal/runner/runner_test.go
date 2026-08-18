@@ -199,7 +199,7 @@ func TestRunner_ExplicitTrip_IntermediateStopsContinueUntilHome(t *testing.T) {
 	assert.True(t, active.IsZero())
 }
 
-func TestRunner_ExplicitTrip_MustStartAtHome(t *testing.T) {
+func TestRunner_ExplicitTrip_PersistsStartWithoutImmediateGpsFix(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	st, err := store.New(":memory:")
 	require.NoError(t, err)
@@ -209,16 +209,17 @@ func TestRunner_ExplicitTrip_MustStartAtHome(t *testing.T) {
 		&config.Config{Filters: config.FiltersConfig{
 			HomeZones: []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 100}},
 		}},
-		&stubOwnTracks{points: []owntracks.Point{
-			{Tst: now.Unix(), Lat: 51.4800, Lon: -0.1200, Acc: 10},
-		}},
+		&stubOwnTracks{},
 		st,
 		&stubNotifier{},
 		nil,
 		zap.NewNop(),
 	)
 
-	assert.ErrorContains(t, r.StartExplicitTrip(context.Background(), now), "must start at home")
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+	active, err := st.GetActiveManualTripStart(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, now, active)
 }
 
 func TestRunner_ExplicitTrip_AcceptsDelayedHomeFixAfterStart(t *testing.T) {
@@ -246,7 +247,7 @@ func TestRunner_ExplicitTrip_AcceptsDelayedHomeFixAfterStart(t *testing.T) {
 	assert.Equal(t, now, active)
 }
 
-func TestRunner_ExplicitTrip_AcceptsNearbyDelayedDepartureFix(t *testing.T) {
+func TestRunner_ExplicitTrip_AcceptsStartBeforeDelayedDepartureFix(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	st, err := store.New(":memory:")
 	require.NoError(t, err)
@@ -254,12 +255,10 @@ func TestRunner_ExplicitTrip_AcceptsNearbyDelayedDepartureFix(t *testing.T) {
 
 	r := runner.NewWithDeps(
 		&config.Config{Filters: config.FiltersConfig{
-			StartHomeGraceM: 500,
-			HomeZones:       []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
+			HomeZones: []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
 		}},
 		&stubOwnTracks{points: []owntracks.Point{
-			// About 700 m from the home center: outside the zone itself,
-			// but within the delayed-fix grace radius.
+			// The first fix can arrive after the explicit start event.
 			{Tst: now.Add(5 * time.Minute).Unix(), Lat: 51.5063, Lon: testHomeLon, Acc: 10},
 		}},
 		st,
@@ -274,7 +273,7 @@ func TestRunner_ExplicitTrip_AcceptsNearbyDelayedDepartureFix(t *testing.T) {
 	assert.Equal(t, now, active)
 }
 
-func TestRunner_ExplicitTrip_RejectsDelayedFixBeyondStartHomeGrace(t *testing.T) {
+func TestRunner_ExplicitTrip_AcceptsStartRegardlessOfImmediateFixLocation(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	st, err := store.New(":memory:")
 	require.NoError(t, err)
@@ -282,8 +281,7 @@ func TestRunner_ExplicitTrip_RejectsDelayedFixBeyondStartHomeGrace(t *testing.T)
 
 	r := runner.NewWithDeps(
 		&config.Config{Filters: config.FiltersConfig{
-			StartHomeGraceM: 500,
-			HomeZones:       []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
+			HomeZones: []config.ExclusionZone{{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}},
 		}},
 		&stubOwnTracks{points: []owntracks.Point{
 			{Tst: now.Add(5 * time.Minute).Unix(), Lat: 51.5200, Lon: testHomeLon, Acc: 10},
@@ -294,7 +292,10 @@ func TestRunner_ExplicitTrip_RejectsDelayedFixBeyondStartHomeGrace(t *testing.T)
 		zap.NewNop(),
 	)
 
-	assert.ErrorContains(t, r.StartExplicitTrip(context.Background(), now), "must start at home")
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+	active, err := st.GetActiveManualTripStart(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, now, active)
 }
 
 func TestRunner_ProcessOnce_TaggedStopReachesNotificationAndStore(t *testing.T) {
