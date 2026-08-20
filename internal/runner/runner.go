@@ -128,7 +128,11 @@ func (r *Runner) StopExplicitTrip(ctx context.Context, end time.Time) (trips.Tri
 		}
 		return trips.Trip{}, false, nil
 	}
-	trip, ok, err := r.classifyExplicitTrip(points)
+	stops, err := r.store.GetActiveManualStops(ctx)
+	if err != nil {
+		return trips.Trip{}, false, err
+	}
+	trip, ok, err := r.classifyExplicitJourney(points, start.Unix(), end.Unix(), stops)
 	if err != nil {
 		return trips.Trip{}, false, err
 	}
@@ -137,10 +141,6 @@ func (r *Runner) StopExplicitTrip(ctx context.Context, end time.Time) (trips.Tri
 	}
 	trip.StartTime = start.UTC()
 	trip.Date = start.UTC().Format("2006-01-02")
-	stops, err := r.store.GetActiveManualStops(ctx)
-	if err != nil {
-		return trips.Trip{}, false, err
-	}
 	trip.StopPoints = append(trip.StopPoints, stops...)
 	sort.SliceStable(trip.StopPoints, func(i, j int) bool {
 		return trip.StopPoints[i].ArrivalTst < trip.StopPoints[j].ArrivalTst
@@ -199,17 +199,67 @@ func absDuration(d time.Duration) time.Duration {
 	return d
 }
 
-func (r *Runner) classifyExplicitTrip(points []owntracks.Point) (trips.Trip, bool, error) {
-	if len(points) < 2 {
-		return trips.Trip{}, false, nil
-	}
+func (r *Runner) classifyExplicitJourney(points []owntracks.Point, startTst, endTst int64, stops []trips.StopPoint) (trips.Trip, bool, error) {
 	cfg := r.classifierConfig()
 	cfg.ExplicitDrive = true
-	trip, reason, keep := trips.Classify(trips.RawTrip{Points: points}, cfg)
-	if !keep {
-		return trips.Trip{}, false, fmt.Errorf("explicit trip discarded: %s", reason)
+	// Each leg is measured independently, so a short leg should not be
+	// rejected just because the complete journey normally has a minimum.
+	cfg.MinDistanceKm = 0.001
+	cfg.ExplicitMinDistanceKm = 0.001
+
+	var legs []trips.Trip
+	legStart := startTst
+	for _, stop := range stops {
+		if stop.DepartureTst <= stop.ArrivalTst {
+			continue
+		}
+		leg, ok := classifyExplicitLeg(points, legStart, stop.ArrivalTst, cfg)
+		if !ok {
+			return trips.Trip{}, false, nil
+		}
+		legs = append(legs, leg)
+		legStart = stop.DepartureTst
 	}
-	return trip, true, nil
+	leg, ok := classifyExplicitLeg(points, legStart, endTst, cfg)
+	if !ok {
+		return trips.Trip{}, false, nil
+	}
+	legs = append(legs, leg)
+
+	first := legs[0]
+	last := legs[len(legs)-1]
+	combined := trips.Trip{
+		StartLat:    first.StartLat,
+		StartLon:    first.StartLon,
+		EndLat:      last.EndLat,
+		EndLon:      last.EndLon,
+		EndTime:     last.EndTime,
+		DistanceKm:  0,
+		MaxSpeedKmh: 0,
+		Mode:        trips.ModeCar,
+	}
+	for _, leg := range legs {
+		combined.DistanceKm += leg.DistanceKm
+		if leg.MaxSpeedKmh > combined.MaxSpeedKmh {
+			combined.MaxSpeedKmh = leg.MaxSpeedKmh
+		}
+		combined.Points = append(combined.Points, leg.Points...)
+	}
+	return combined, true, nil
+}
+
+func classifyExplicitLeg(points []owntracks.Point, startTst, endTst int64, cfg trips.ClassifierConfig) (trips.Trip, bool) {
+	legPoints := make([]owntracks.Point, 0)
+	for _, point := range points {
+		if point.Tst >= startTst && point.Tst <= endTst {
+			legPoints = append(legPoints, point)
+		}
+	}
+	if len(legPoints) < 2 {
+		return trips.Trip{}, false
+	}
+	leg, _, keep := trips.Classify(trips.RawTrip{Points: legPoints}, cfg)
+	return leg, keep
 }
 
 func (r *Runner) saveExplicitTrip(ctx context.Context, trip trips.Trip, notify bool) error {

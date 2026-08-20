@@ -56,7 +56,8 @@ func TestTelegram_SendAll(t *testing.T) {
 	assert.Equal(t, "12345", gotBody["chat_id"])
 	assert.Contains(t, gotBody["text"], "New trips logged:")
 	assert.Contains(t, gotBody["text"], "341.2 km")
-	assert.Contains(t, gotBody["text"], "50.0000,0.0000 (49m)")
+	assert.Contains(t, gotBody["text"], "50.0000,0.0000")
+	assert.NotContains(t, gotBody["text"], "(49m)")
 	// Both trips should appear as bullet points
 	assert.Equal(t, 2, strings.Count(gotBody["text"], "•"))
 	// Date format: "20 Jul 2026"
