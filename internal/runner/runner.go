@@ -33,7 +33,7 @@ type geocoder interface {
 	Reverse(ctx context.Context, lat, lon float64) (geocode.Location, error)
 }
 
-// Runner orchestrates the fetch → segment → classify → store → notify pipeline.
+// Runner handles manually started trips and historical replay operations.
 type Runner struct {
 	cfg      *config.Config
 	ot       locationFetcher
@@ -278,17 +278,8 @@ func (r *Runner) saveExplicitTrip(ctx context.Context, trip trips.Trip, notify b
 	return nil
 }
 
-// Run blocks until shutdown. Trip completion is event-driven through the
-// explicit start/stop API; no background job creates or completes trips.
-func (r *Runner) Run(ctx context.Context) error {
-	<-ctx.Done()
-	r.log.Info("runner shutting down")
-	return ctx.Err()
-}
-
 // Backfill processes the full range [from, to] in monthly chunks to avoid
-// loading all GPS history into memory at once. It does not update the
-// last_processed_time state — the caller is responsible for that.
+// loading all GPS history into memory at once.
 func (r *Runner) Backfill(ctx context.Context, from, to time.Time) error {
 	cursor := from
 	for cursor.Before(to) {

@@ -1,15 +1,17 @@
 # autolog
 
-Automatically logs car trips from [OwnTracks Recorder](https://owntracks.org/booklet/guide/recorder/) and sends notifications via Telegram (or stdout). Trips are stored in a local SQLite database with reverse-geocoded start/end locations.
+Records manually started and stopped car trips using location history from [OwnTracks Recorder](https://owntracks.org/booklet/guide/recorder/), then sends notifications via Telegram (or stdout). Trips are stored in a local SQLite database with reverse-geocoded locations.
 
 ## How it works
 
-Autolog is event-driven for live trips:
+Autolog does not automatically detect live trips. The phone or shortcut controls the lifecycle:
 
 1. A trip start event records the explicit start time immediately.
 2. Stop and start events away from home are treated as intermediate journey events.
 3. The journey remains active until a stop event arrives while the device is back in a home zone.
-4. The complete home-to-home journey is then classified, stored, and notified.
+4. A stop event at home completes the journey, which is classified, stored, and notified.
+
+Historical replay remains available through the backfill, inspection, and replay commands. Those commands segment location history heuristically; they are not used for live trip completion.
 
 ## Requirements
 
@@ -39,7 +41,7 @@ http:
 filters:
   max_train_speed_kmh: 150   # speeds above this classify the trip as train
   max_acc_m: 100             # GPS points with accuracy worse than this are dropped
-  # A live trip must start and finish inside one of these home zones.
+  # A manual stop inside one of these zones completes the journey.
   exclusion_zones:
     - name: "home"
       lat: 0.0000
@@ -126,7 +128,7 @@ Do not put the token in Traefik labels or the Shortcut URL. The Shortcut should 
 
 ### Backfill historical data
 
-To process historical location data from a specific date:
+To heuristically process historical location data from a specific date:
 
 ```bash
 go run ./cmd/autolog -backfill -from 2026-01-01
@@ -158,13 +160,13 @@ With `HTTP_ADDR` and `TRIP_EVENT_TOKEN` configured, iOS Shortcuts can call:
 
 ```text
 POST /autolog/api/trips/start
-POST /api/trips/stop
+POST /autolog/api/trips/stop
 Authorization: Bearer <TRIP_EVENT_TOKEN>
 Content-Type: application/json
 {"timestamp":"2026-08-13T00:50:00Z"}
 ```
 
-The start call records the explicit start time without waiting for a GPS fix. Repeated starts and stops away from home are continuation events; each away-from-home stop is stored as an explicit stop and the response is `{"status":"ongoing"}`. The next start closes that stop's departure time. A stop at home fetches the complete OwnTracks window, stores the final result as a car trip with the explicit stops, and returns `{"status":"completed"}`. Authenticated event requests always return HTTP 200; processing failures are written to the application log.
+The start call records the explicit start time without waiting for a GPS fix. Repeated starts and stops away from home are continuation events; each away-from-home stop is stored as an explicit stop and the response is `{"status":"ongoing"}`. The next start closes that stop's departure time. A stop at home fetches the complete OwnTracks window, stores the final result as a car trip with the explicit stops, and returns `{"status":"completed"}`. Authenticated event requests always return HTTP 200; processing failures are written to the application log. Trips are not created by the background daemon without these events.
 
 ### Query trips through MCP
 

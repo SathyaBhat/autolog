@@ -47,7 +47,6 @@ type AlgorithmFlags struct {
 type FiltersConfig struct {
 	MaxTrainSpeedKmh float64         `mapstructure:"max_train_speed_kmh"`
 	MaxAccM          float64         `mapstructure:"max_acc_m"`
-	StartHomeGraceM  float64         `mapstructure:"start_home_grace_m"`
 	MaxTripGap       time.Duration   `mapstructure:"max_trip_gap"`
 	StopGap          time.Duration   `mapstructure:"stop_gap"`
 	ExclusionZones   []ExclusionZone `mapstructure:"exclusion_zones"`
@@ -80,7 +79,6 @@ func Load(cfgFile string) (*Config, error) {
 	v.SetDefault("http.addr", "")
 	v.SetDefault("filters.max_train_speed_kmh", 150.0)
 	v.SetDefault("filters.max_acc_m", 100.0)
-	v.SetDefault("filters.start_home_grace_m", 500.0)
 	v.SetDefault("filters.max_trip_gap", 90*time.Minute)
 	v.SetDefault("filters.stop_gap", 10*time.Minute)
 	v.SetDefault("store.path", "autolog.db")

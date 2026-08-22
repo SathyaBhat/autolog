@@ -369,32 +369,6 @@ func (s *Store) TripExists(ctx context.Context, date string, startTime time.Time
 	return count > 0, err
 }
 
-// GetLastProcessedTime returns the last successfully processed timestamp, or
-// a zero time.Time if never set.
-func (s *Store) GetLastProcessedTime(ctx context.Context) (time.Time, error) {
-	var raw string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT value FROM state WHERE key = 'last_processed_time'`,
-	).Scan(&raw)
-	if err == sql.ErrNoRows {
-		return time.Time{}, nil
-	}
-	if err != nil {
-		return time.Time{}, err
-	}
-	t, err := time.Parse(time.RFC3339, raw)
-	return t, err
-}
-
-// SetLastProcessedTime upserts the last successfully processed timestamp.
-func (s *Store) SetLastProcessedTime(ctx context.Context, t time.Time) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT OR REPLACE INTO state (key, value) VALUES ('last_processed_time', ?)`,
-		t.UTC().Format(time.RFC3339),
-	)
-	return err
-}
-
 const activeManualTripKey = "active_manual_trip_start"
 const activeManualStopsKey = "active_manual_trip_stops"
 

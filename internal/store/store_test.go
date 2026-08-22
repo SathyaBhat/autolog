@@ -257,19 +257,3 @@ func TestSaveTrip_LocationColumns_EmptyOK(t *testing.T) {
 	}
 	require.NoError(t, s.SaveTrip(ctx, trip))
 }
-
-func TestLastProcessedTime_RoundTrip(t *testing.T) {
-	ctx := context.Background()
-	s := newTestStore(t)
-
-	ts, err := s.GetLastProcessedTime(ctx)
-	require.NoError(t, err)
-	assert.True(t, ts.IsZero())
-
-	now := time.Now().UTC().Truncate(time.Second)
-	require.NoError(t, s.SetLastProcessedTime(ctx, now))
-
-	got, err := s.GetLastProcessedTime(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, now, got)
-}

@@ -36,7 +36,6 @@ func TestLoad_Defaults(t *testing.T) {
 	cfg, err := config.Load("")
 	require.NoError(t, err)
 	assert.Equal(t, 150.0, cfg.Filters.MaxTrainSpeedKmh)
-	assert.Equal(t, 500.0, cfg.Filters.StartHomeGraceM)
 }
 
 func TestLoad_MissingRequired(t *testing.T) {

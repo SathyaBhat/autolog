@@ -150,16 +150,11 @@ func main() {
 		if err := r.Backfill(ctx, from, to); err != nil && !errors.Is(err, context.Canceled) {
 			log.Fatal("backfill failed", zap.Error(err))
 		}
-		if err := st.SetLastProcessedTime(ctx, to); err != nil {
-			log.Error("failed to update last processed time after backfill", zap.Error(err))
-		}
 		log.Info("backfill complete")
 		return
 	}
 
-	if err := r.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Fatal("runner exited with error", zap.Error(err))
-	}
+	<-ctx.Done()
 	log.Info("autolog stopped cleanly")
 }
 
