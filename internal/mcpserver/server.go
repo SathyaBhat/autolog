@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/sathyabhat/autolog/internal/store"
+	"github.com/sathyabhat/autolog/internal/trips"
 )
 
 // HTTPHandler returns a Streamable HTTP MCP endpoint protected by a bearer token.
@@ -78,15 +79,16 @@ type listTripsInput struct {
 }
 
 type tripOutput struct {
-	Date          string  `json:"date"`
-	StartTime     string  `json:"start_time"`
-	EndTime       string  `json:"end_time"`
-	StartLocation string  `json:"start_location,omitempty"`
-	EndLocation   string  `json:"end_location,omitempty"`
-	DistanceKm    float64 `json:"distance_km"`
-	MaxSpeedKmh   float64 `json:"max_speed_kmh"`
-	Mode          string  `json:"mode"`
-	StopCount     int     `json:"stop_count"`
+	Date              string   `json:"date"`
+	StartTime         string   `json:"start_time"`
+	EndTime           string   `json:"end_time"`
+	StartLocation     string   `json:"start_location,omitempty"`
+	EndLocation       string   `json:"end_location,omitempty"`
+	DistanceKm        float64  `json:"distance_km"`
+	MaxSpeedKmh       float64  `json:"max_speed_kmh"`
+	Mode              string   `json:"mode"`
+	StopCount         int      `json:"stop_count"`
+	IntermediateStops []string `json:"intermediate_stops,omitempty"`
 }
 
 type listTripsOutput struct {
@@ -117,7 +119,13 @@ func (s *Server) listTrips(ctx context.Context, _ *mcp.CallToolRequest, in listT
 	}
 	out := listTripsOutput{Trips: make([]tripOutput, 0, len(trips)), Count: len(trips)}
 	for _, trip := range trips {
-		out.Trips = append(out.Trips, s.formatTrip(trip))
+		formatted := s.formatTrip(trip)
+		stops, err := s.store.GetTripStops(ctx, trip.Date, trip.StartTime)
+		if err != nil {
+			return nil, listTripsOutput{}, err
+		}
+		formatted.IntermediateStops = stopLabels(stops)
+		out.Trips = append(out.Trips, formatted)
 	}
 	return nil, out, nil
 }
@@ -173,6 +181,7 @@ func (s *Server) tripDetails(ctx context.Context, _ *mcp.CallToolRequest, in tri
 		return nil, tripDetailsOutput{}, err
 	}
 	out := tripDetailsOutput{tripOutput: s.formatTrip(summary), Stops: make([]stopOutput, 0, len(stops))}
+	out.IntermediateStops = stopLabels(stops)
 	for _, stop := range stops {
 		out.Stops = append(out.Stops, stopOutput{
 			Arrival:     time.Unix(stop.ArrivalTst, 0).In(s.location).Format(time.RFC3339),
@@ -275,6 +284,18 @@ func (s *Server) formatTrip(trip store.TripSummary) tripOutput {
 		Mode:          string(trip.Mode),
 		StopCount:     trip.StopCount,
 	}
+}
+
+func stopLabels(stops []trips.StopPoint) []string {
+	labels := make([]string, 0, len(stops))
+	for _, stop := range stops {
+		if stop.Location != "" {
+			labels = append(labels, stop.Location)
+			continue
+		}
+		labels = append(labels, fmt.Sprintf("%.4f,%.4f", stop.Lat, stop.Lon))
+	}
+	return labels
 }
 
 func validateDate(value string) error {

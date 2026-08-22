@@ -89,7 +89,7 @@ func TestRunner_ProcessOnce_NoNotificationUnder100km(t *testing.T) {
 	assert.Empty(t, tg.sent)
 }
 
-func TestRunner_ExplicitTrip_StoresTripBelowNormalMinimumAndNotifies(t *testing.T) {
+func TestRunner_ExplicitTrip_StoresShortTripAndNotifies(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	pts := []owntracks.Point{
 		{Tst: now.Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},

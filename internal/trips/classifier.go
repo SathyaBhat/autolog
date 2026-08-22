@@ -1,7 +1,6 @@
 package trips
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -11,25 +10,21 @@ import (
 
 // ClassifierConfig controls the train-detection and exclusion-zone heuristics.
 type ClassifierConfig struct {
-	MaxTrainSpeedKmh      float64
-	MinDistanceKm         float64
-	ExplicitMinDistanceKm float64
-	MaxAccM               float64
-	StopGap               time.Duration
-	ExclusionZones        []config.ExclusionZone
-	Flags                 AlgorithmFlags
-	AnomalyMaxKmh         float64 // used when Flags.AnomalyFilter is true; 0 → 500 km/h default
-	StayRadiusM           float64 // used when Flags.StaySegment is true; 0 → 50 m default
-	StayMinDur            time.Duration
-	StayMaxGap            time.Duration
-	TransitGap            time.Duration // min gap between consecutive points to flag as transit
-	TransitMinDistKm      float64       // min distance across that gap to confirm transit
-	ExplicitDrive         bool          // phone-triggered trip; bypasses normal discard filters
+	MaxTrainSpeedKmh float64
+	MaxAccM          float64
+	StopGap          time.Duration
+	ExclusionZones   []config.ExclusionZone
+	Flags            AlgorithmFlags
+	AnomalyMaxKmh    float64 // used when Flags.AnomalyFilter is true; 0 → 500 km/h default
+	StayRadiusM      float64 // used when Flags.StaySegment is true; 0 → 50 m default
+	StayMinDur       time.Duration
+	StayMaxGap       time.Duration
+	ExplicitDrive    bool // phone-triggered trip; bypasses exclusion zones and forces car mode
 }
 
 // Classify measures and classifies a RawTrip.
 // Returns (trip, reason, true) if the trip should be stored, (Trip{}, reason, false) if it
-// should be discarded (exclusion zone hit, too short, or all points inaccurate).
+// should be discarded (exclusion zone hit or all points inaccurate).
 // Train trips are stored but marked ModeTrain so they appear in the log.
 func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 	maxAcc := cfg.MaxAccM
@@ -70,23 +65,6 @@ func Classify(raw RawTrip, cfg ClassifierConfig) (Trip, string, bool) {
 				maxSpeed = speedKmh
 			}
 		}
-	}
-
-	minDist := cfg.MinDistanceKm
-	if cfg.ExplicitDrive {
-		minDist = cfg.ExplicitMinDistanceKm
-		if minDist <= 0 {
-			minDist = 3.0
-		}
-	} else if minDist <= 0 {
-		minDist = 2.0
-	}
-	if distKm < minDist {
-		return Trip{}, fmt.Sprintf("too short (%.2f km)", distKm), false
-	}
-
-	if !cfg.ExplicitDrive && isTransit(pts, cfg.TransitGap, cfg.TransitMinDistKm) {
-		return Trip{}, "transit", false
 	}
 
 	var mode TransportMode
@@ -176,26 +154,6 @@ func min64(a, b int64) int64 {
 		return a
 	}
 	return b
-}
-
-// isTransit returns true if any consecutive pair of points has a time gap >=
-// transitGap and a distance >= transitMinDistKm. Zero/negative thresholds
-// disable the check.
-func isTransit(pts []owntracks.Point, transitGap time.Duration, transitMinDistKm float64) bool {
-	if transitGap <= 0 || transitMinDistKm <= 0 {
-		return false
-	}
-	gapSec := int64(transitGap.Seconds())
-	for i := 1; i < len(pts); i++ {
-		dt := pts[i].Tst - pts[i-1].Tst
-		if dt >= gapSec {
-			d := HaversineKm(pts[i-1].Lat, pts[i-1].Lon, pts[i].Lat, pts[i].Lon)
-			if d >= transitMinDistKm {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // classifyBySegmentVote splits pts at >50% relative speed changes, classifies

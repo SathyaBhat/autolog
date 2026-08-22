@@ -82,24 +82,20 @@ func (r *Runner) ReviewTrip(ctx context.Context, target time.Time, reprocess boo
 
 func (r *Runner) classifierConfig() trips.ClassifierConfig {
 	return trips.ClassifierConfig{
-		MaxTrainSpeedKmh:      r.cfg.Filters.MaxTrainSpeedKmh,
-		MinDistanceKm:         r.cfg.Filters.MinDistanceKm,
-		ExplicitMinDistanceKm: r.cfg.Filters.ExplicitMinDistanceKm,
-		MaxAccM:               r.cfg.Filters.MaxAccM,
-		StopGap:               r.cfg.Filters.StopGap,
-		ExclusionZones:        r.cfg.Filters.ExclusionZones,
+		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
+		MaxAccM:          r.cfg.Filters.MaxAccM,
+		StopGap:          r.cfg.Filters.StopGap,
+		ExclusionZones:   r.cfg.Filters.ExclusionZones,
 		Flags: trips.AlgorithmFlags{
 			AnomalyFilter:  r.cfg.Filters.AlgorithmFlags.AnomalyFilter,
 			StaySegment:    r.cfg.Filters.AlgorithmFlags.StaySegment,
 			SegmentVote:    r.cfg.Filters.AlgorithmFlags.SegmentVote,
 			AccelTrainGate: r.cfg.Filters.AlgorithmFlags.AccelTrainGate,
 		},
-		AnomalyMaxKmh:    r.cfg.Filters.AnomalyMaxKmh,
-		StayRadiusM:      r.cfg.Filters.StayRadiusM,
-		StayMinDur:       r.cfg.Filters.StayMinDur,
-		StayMaxGap:       r.cfg.Filters.StayMaxGap,
-		TransitGap:       r.cfg.Filters.TransitGap,
-		TransitMinDistKm: r.cfg.Filters.TransitMinDistKm,
+		AnomalyMaxKmh: r.cfg.Filters.AnomalyMaxKmh,
+		StayRadiusM:   r.cfg.Filters.StayRadiusM,
+		StayMinDur:    r.cfg.Filters.StayMinDur,
+		StayMaxGap:    r.cfg.Filters.StayMaxGap,
 	}
 }
 

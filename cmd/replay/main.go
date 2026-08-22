@@ -231,7 +231,6 @@ func main() {
 func classCfg(flags trips.AlgorithmFlags, zones []config.ExclusionZone) trips.ClassifierConfig {
 	return trips.ClassifierConfig{
 		MaxTrainSpeedKmh: 150,
-		MinDistanceKm:    2.0,
 		MaxAccM:          100,
 		StopGap:          10 * time.Minute,
 		Flags:            flags,
@@ -492,4 +491,3 @@ func resolveString(flagVal, envKey string) string {
 	}
 	return os.Getenv(envKey)
 }
-

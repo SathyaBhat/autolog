@@ -38,8 +38,6 @@ http:
 
 filters:
   max_train_speed_kmh: 150   # speeds above this classify the trip as train
-  min_distance_km: 5.0       # trips shorter than this are discarded
-  explicit_min_distance_km: 3.0 # phone-triggered trips shorter than this are discarded
   max_acc_m: 100             # GPS points with accuracy worse than this are dropped
   # A live trip must start and finish inside one of these home zones.
   exclusion_zones:
@@ -64,7 +62,6 @@ log:
 | `OWNTRACKS_DEVICE` | OwnTracks device name |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID to send messages to |
-| `FILTERS_EXPLICIT_MIN_DISTANCE_KM` | Minimum distance for phone-triggered trips (default: `3.0`) |
 | `HTTP_ADDR` | Address for the phone trip-event API; empty disables it |
 | `TRIP_EVENT_TOKEN` | Bearer token required by the phone trip-event API |
 | `STORE_PATH` | Path to the SQLite database (default: `autolog.db`) |

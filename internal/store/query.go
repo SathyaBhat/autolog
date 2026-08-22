@@ -96,13 +96,14 @@ func (s *Store) GetTripSummary(ctx context.Context, date string, startTime time.
 	var trip TripSummary
 	var startUnix, endUnix int64
 	var mode string
+	startMinute := startTime.Truncate(time.Minute)
 	err := s.db.QueryRowContext(ctx, `
 		SELECT t.date, t.start_time, t.end_time, t.start_location, t.end_location,
 		       t.distance_km, t.max_speed_kmh, t.mode,
 		       (SELECT COUNT(*) FROM stop_points sp WHERE sp.trip_id = t.id)
 		FROM trips t
-		WHERE t.date = ? AND t.start_time = ?`,
-		date, startTime.Unix(),
+		WHERE t.date = ? AND t.start_time >= ? AND t.start_time < ?`,
+		date, startMinute.Unix(), startMinute.Add(time.Minute).Unix(),
 	).Scan(
 		&trip.Date,
 		&startUnix,

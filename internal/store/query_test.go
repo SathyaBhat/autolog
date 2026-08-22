@@ -35,3 +35,20 @@ func TestListTripsFiltersAndOrders(t *testing.T) {
 	require.Equal(t, "Airport", got[0].EndLocation)
 	require.Equal(t, trips.ModeTrain, got[0].Mode)
 }
+
+func TestGetTripSummaryMatchesDisplayedStartMinute(t *testing.T) {
+	ctx := context.Background()
+	s, err := New(":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = s.Close() })
+
+	start := time.Date(2026, 8, 22, 0, 0, 45, 0, time.UTC)
+	require.NoError(t, s.SaveTrip(ctx, trips.Trip{
+		Date: "2026-08-22", StartTime: start, EndTime: start.Add(time.Hour),
+		StartLocation: "Home", EndLocation: "Home", DistanceKm: 76.9, Mode: trips.ModeCar,
+	}))
+
+	got, err := s.GetTripSummary(ctx, "2026-08-22", time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Equal(t, start, got.StartTime)
+}

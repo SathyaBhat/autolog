@@ -45,25 +45,21 @@ func TestClassify_Train_MaxSpeed(t *testing.T) {
 	assert.Equal(t, trips.ModeTrain, trip.Mode)
 }
 
-func TestClassify_Transit_Discarded(t *testing.T) {
+func TestClassify_LongGapIsKept(t *testing.T) {
 	now := time.Now().Unix()
-	// Simulate a metro/bus trip: one segment with a 6-minute gap covering 6 km.
+	// A long GPS gap must not cause a manually started journey to be discarded.
 	raw := trips.RawTrip{Points: []owntracks.Point{
 		{Tst: now, Lat: -33.730588, Lon: 150.944042, Acc: 10},
 		{Tst: now + 360, Lat: -33.777193, Lon: 151.117753, Acc: 72}, // 360s gap, ~17 km
 		{Tst: now + 720, Lat: -33.865145, Lon: 151.202092, Acc: 10},
 	}}
-	cfg := trips.ClassifierConfig{
-		MaxTrainSpeedKmh: 150,
-		TransitGap:       5 * time.Minute,
-		TransitMinDistKm: 5.0,
-	}
-	_, reason, keep := trips.Classify(raw, cfg)
-	assert.False(t, keep)
-	assert.Equal(t, "transit", reason)
+	trip, reason, keep := trips.Classify(raw, trips.ClassifierConfig{MaxTrainSpeedKmh: 150})
+	assert.True(t, keep, reason)
+	assert.Empty(t, reason)
+	assert.Greater(t, trip.DistanceKm, 0.0)
 }
 
-func TestClassify_Transit_CarNotAffected(t *testing.T) {
+func TestClassify_FrequentPointsKept(t *testing.T) {
 	now := time.Now().Unix()
 	// Normal car trip: frequent points, no single gap exceeding threshold.
 	raw := trips.RawTrip{Points: []owntracks.Point{
@@ -74,14 +70,23 @@ func TestClassify_Transit_CarNotAffected(t *testing.T) {
 		{Tst: now + 240, Lat: -33.750, Lon: 150.946, Acc: 10, Tag: "drive"},
 		{Tst: now + 300, Lat: -33.755, Lon: 150.953, Acc: 10, Tag: "drive"},
 	}}
-	cfg := trips.ClassifierConfig{
-		MaxTrainSpeedKmh: 150,
-		TransitGap:       5 * time.Minute,
-		TransitMinDistKm: 5.0,
-	}
+	cfg := trips.ClassifierConfig{MaxTrainSpeedKmh: 150}
 	trip, _, keep := trips.Classify(raw, cfg)
 	assert.True(t, keep)
 	assert.Equal(t, trips.ModeCar, trip.Mode)
+}
+
+func TestClassify_ShortTripIsKept(t *testing.T) {
+	now := time.Now().Unix()
+	raw := trips.RawTrip{Points: []owntracks.Point{
+		{Tst: now, Lat: -33.7300, Lon: 150.9180, Acc: 10},
+		{Tst: now + 60, Lat: -33.7305, Lon: 150.9185, Acc: 10},
+	}}
+
+	trip, reason, keep := trips.Classify(raw, trips.ClassifierConfig{MaxTrainSpeedKmh: 150})
+	assert.True(t, keep, reason)
+	assert.Empty(t, reason)
+	assert.Less(t, trip.DistanceKm, 1.0)
 }
 
 func TestClassify_ExclusionZone_Start(t *testing.T) {
@@ -211,7 +216,6 @@ func TestClassify_StopPoints_DwellClusterDetected(t *testing.T) {
 	raw := trips.RawTrip{Points: pts}
 	cfg := trips.ClassifierConfig{
 		MaxTrainSpeedKmh: 150,
-		MinDistanceKm:    1,
 		StopGap:          10 * time.Minute,
 	}
 	trip, _, keep := trips.Classify(raw, cfg)
@@ -235,7 +239,6 @@ func TestClassify_RealTrip_2026Aug10SparseStop(t *testing.T) {
 
 	trip, reason, keep := trips.Classify(trips.RawTrip{Points: points}, trips.ClassifierConfig{
 		MaxTrainSpeedKmh: 150,
-		MinDistanceKm:    5,
 		StopGap:          10 * time.Minute,
 		StayMaxGap:       5 * time.Minute,
 	})

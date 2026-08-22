@@ -202,10 +202,6 @@ func absDuration(d time.Duration) time.Duration {
 func (r *Runner) classifyExplicitJourney(points []owntracks.Point, startTst, endTst int64, stops []trips.StopPoint) (trips.Trip, bool, error) {
 	cfg := r.classifierConfig()
 	cfg.ExplicitDrive = true
-	// Each leg is measured independently, so a short leg should not be
-	// rejected just because the complete journey normally has a minimum.
-	cfg.MinDistanceKm = 0.001
-	cfg.ExplicitMinDistanceKm = 0.001
 
 	var legs []trips.Trip
 	legStart := startTst
@@ -322,24 +318,20 @@ func (r *Runner) ProcessOnce(ctx context.Context, from, to time.Time) error {
 	}
 
 	classCfg := trips.ClassifierConfig{
-		MaxTrainSpeedKmh:      r.cfg.Filters.MaxTrainSpeedKmh,
-		MinDistanceKm:         r.cfg.Filters.MinDistanceKm,
-		ExplicitMinDistanceKm: r.cfg.Filters.ExplicitMinDistanceKm,
-		MaxAccM:               r.cfg.Filters.MaxAccM,
-		StopGap:               r.cfg.Filters.StopGap,
-		ExclusionZones:        r.cfg.Filters.ExclusionZones,
+		MaxTrainSpeedKmh: r.cfg.Filters.MaxTrainSpeedKmh,
+		MaxAccM:          r.cfg.Filters.MaxAccM,
+		StopGap:          r.cfg.Filters.StopGap,
+		ExclusionZones:   r.cfg.Filters.ExclusionZones,
 		Flags: trips.AlgorithmFlags{
 			AnomalyFilter:  r.cfg.Filters.AlgorithmFlags.AnomalyFilter,
 			StaySegment:    r.cfg.Filters.AlgorithmFlags.StaySegment,
 			SegmentVote:    r.cfg.Filters.AlgorithmFlags.SegmentVote,
 			AccelTrainGate: r.cfg.Filters.AlgorithmFlags.AccelTrainGate,
 		},
-		AnomalyMaxKmh:    r.cfg.Filters.AnomalyMaxKmh,
-		StayRadiusM:      r.cfg.Filters.StayRadiusM,
-		StayMinDur:       r.cfg.Filters.StayMinDur,
-		StayMaxGap:       r.cfg.Filters.StayMaxGap,
-		TransitGap:       r.cfg.Filters.TransitGap,
-		TransitMinDistKm: r.cfg.Filters.TransitMinDistKm,
+		AnomalyMaxKmh: r.cfg.Filters.AnomalyMaxKmh,
+		StayRadiusM:   r.cfg.Filters.StayRadiusM,
+		StayMinDur:    r.cfg.Filters.StayMinDur,
+		StayMaxGap:    r.cfg.Filters.StayMaxGap,
 	}
 
 	var rawTrips []trips.RawTrip
