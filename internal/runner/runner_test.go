@@ -200,6 +200,52 @@ func TestRunner_ExplicitTrip_IntermediateStopsContinueUntilHome(t *testing.T) {
 	assert.True(t, active.IsZero())
 }
 
+func TestRunner_ExplicitTrip_AcceptsUnmeasuredIntermediateLeg(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	home := config.ExclusionZone{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}
+	points := []owntracks.Point{
+		{Tst: now.Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+		{Tst: now.Add(time.Minute).Unix(), Lat: 51.4800, Lon: -0.1200, Acc: 10},
+		{Tst: now.Add(5 * time.Minute).Unix(), Lat: 51.4800, Lon: -0.1200, Acc: 10},
+		// No accurate points exist for the second, explicitly recorded leg.
+		{Tst: now.Add(10 * time.Minute).Unix(), Lat: 51.4900, Lon: -0.1150, Acc: 5000},
+		{Tst: now.Add(21 * time.Minute).Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+		{Tst: now.Add(22 * time.Minute).Unix(), Lat: testHomeLat, Lon: testHomeLon, Acc: 10},
+	}
+	st, err := store.New(":memory:")
+	require.NoError(t, err)
+	defer st.Close()
+
+	r := runner.NewWithDeps(
+		&config.Config{Filters: config.FiltersConfig{
+			MaxTrainSpeedKmh: 150,
+			HomeZones:        []config.ExclusionZone{home},
+		}},
+		&stubOwnTracks{points: points},
+		st,
+		&stubNotifier{},
+		nil,
+		zap.NewNop(),
+	)
+
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now))
+	_, completed, err := r.StopExplicitTrip(context.Background(), now.Add(5*time.Minute))
+	require.NoError(t, err)
+	assert.False(t, completed)
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now.Add(6*time.Minute)))
+	// Record an intermediate stop whose departure leg has no usable fixes.
+	_, completed, err = r.StopExplicitTrip(context.Background(), now.Add(10*time.Minute))
+	require.NoError(t, err)
+	assert.False(t, completed)
+	require.NoError(t, r.StartExplicitTrip(context.Background(), now.Add(11*time.Minute)))
+
+	trip, completed, err := r.StopExplicitTrip(context.Background(), now.Add(22*time.Minute))
+	require.NoError(t, err)
+	assert.True(t, completed)
+	assert.Equal(t, trips.ModeCar, trip.Mode)
+	require.Len(t, trip.StopPoints, 2)
+}
+
 func TestRunner_ExplicitTrip_SumsLegDistancesWithoutStopBridge(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	home := config.ExclusionZone{Name: "Home", Lat: testHomeLat, Lon: testHomeLon, RadiusM: 500}

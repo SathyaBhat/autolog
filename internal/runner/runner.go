@@ -211,9 +211,17 @@ func (r *Runner) classifyExplicitJourney(points []owntracks.Point, startTst, end
 		}
 		leg, ok := classifyExplicitLeg(points, legStart, stop.ArrivalTst, cfg)
 		if !ok {
-			return trips.Trip{}, false, nil
+			// An explicitly recorded intermediate stop can have a leg with no
+			// usable GPS fixes (for example, a short departure captured only by
+			// a stale cell-tower fix). Preserve the stop and continue with the
+			// next leg, but require the first and final legs to be measurable so
+			// the completed trip still has meaningful endpoints.
+			if len(legs) == 0 {
+				return trips.Trip{}, false, nil
+			}
+		} else {
+			legs = append(legs, leg)
 		}
-		legs = append(legs, leg)
 		legStart = stop.DepartureTst
 	}
 	leg, ok := classifyExplicitLeg(points, legStart, endTst, cfg)
